@@ -21,10 +21,10 @@ View your app in AI Studio: https://ai.studio/apps/drive/1RDnOPVzuuQRDDmG5GaZJTP
 
 ## Deploy to Cloudflare Pages
 
-This repository is preconfigured for a Cloudflare Pages deployment on the custom domain `spottle.shibeprime.com` using the included `wrangler.toml`.
+This repository is preconfigured for a Cloudflare Pages deployment using the included `wrangler.toml`.
 
 1. Build the site locally: `npm run build`
-2. Deploy to Pages (requires authentication with `wrangler login`): `npm run cf:deploy`
-3. In Cloudflare, point `spottle.shibeprime.com` at the Pages project (Cloudflare automatically provisions the domain from the `custom_domains` list in `wrangler.toml`).
+2. Deploy to Pages (requires authentication with `wrangler login`): `npm run deploy`
+3. Configure any custom domains for the Pages project directly in the Cloudflare dashboard.
 
 The generated static assets live in `dist/`, matching the `pages_build_output_dir` in `wrangler.toml`.
