@@ -1,7 +1,6 @@
 name = "spottle"
 compatibility_date = "2025-02-03"
 pages_build_output_dir = "./dist"
-custom_domains = ["spottle.shibeprime.com"]
 
 [assets]
 directory = "./dist"
