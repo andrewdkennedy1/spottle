@@ -1,0 +1,7 @@
+{
+  "name": "SoundBridge AI",
+  "description": "An AI-powered music migration assistant that helps you move your favorite playlists from Spotify to Apple Music using Gemini's intelligent track matching and metadata analysis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
