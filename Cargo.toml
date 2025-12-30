@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+
+[workspace.metadata.cloudflare]
+project_name = "spottle"
+custom_domain = "spottle.shibeprime.com"
+build_command = "npm run build"
+output_dir = "dist"

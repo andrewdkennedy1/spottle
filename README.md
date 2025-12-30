@@ -18,3 +18,13 @@ View your app in AI Studio: https://ai.studio/apps/drive/1RDnOPVzuuQRDDmG5GaZJTP
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Deploy to Cloudflare Pages
+
+This repository is preconfigured for a Cloudflare Pages deployment on the custom domain `spottle.shibeprime.com` using the included `wrangler.toml`.
+
+1. Build the site locally: `npm run build`
+2. Deploy to Pages (requires authentication with `wrangler login`): `npm run cf:deploy`
+3. In Cloudflare, point `spottle.shibeprime.com` at the Pages project (Cloudflare automatically provisions the domain from the `custom_domains` list in `wrangler.toml`).
+
+The generated static assets live in `dist/`, matching the `pages_build_output_dir` in `wrangler.toml`.
