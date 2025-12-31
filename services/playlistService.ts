@@ -9,8 +9,9 @@ type ParsedTrack = {
 };
 
 type SpotifyAccessTokenResponse = {
-  accessToken?: string;
-  accessTokenExpirationTimestampMs?: number;
+  access_token?: string;
+  token_type?: string;
+  expires_in?: number;
 };
 
 type SpotifyArtist = {
@@ -131,20 +132,33 @@ async function getSpotifyAccessToken(): Promise<string> {
         }
       }
     );
-  } catch {
-    throw new Error("Spotify link could not be accessed. Paste the track list instead.");
+  } catch (e) {
+    console.error("Fetch error:", e);
+    throw new Error("Network error accessing Spotify API. Please check your connection.");
   }
 
   if (!response.ok) {
-    throw new Error("Spotify link could not be accessed. Paste the track list instead.");
+    const text = await response.text();
+    console.error("API Error:", response.status, text);
+    try {
+      const json = JSON.parse(text);
+      if (json.error) throw new Error(json.error + (json.details ? `: ${json.details}` : ""));
+    } catch (e) {
+      if (e instanceof Error && !e.message.startsWith("Spotify Error")) {
+        throw new Error(`Spotify API Error: ${response.status} ${response.statusText}`);
+      }
+      throw e;
+    }
+    throw new Error(`Spotify API Error: ${response.status} ${response.statusText}`);
   }
 
   const data = (await response.json()) as SpotifyAccessTokenResponse;
-  if (!data.accessToken) {
-    throw new Error("Spotify link could not be accessed. Paste the track list instead.");
+  if (!data.access_token) {
+    console.error("No access token in response", data);
+    throw new Error("Invalid response from Spotify API.");
   }
 
-  return data.accessToken;
+  return data.access_token;
 }
 
 async function fetchSpotifyPlaylist(
@@ -156,7 +170,7 @@ async function fetchSpotifyPlaylist(
   };
 
   const playlistUrl = new URL(`https://api.spotify.com/v1/playlists/${playlistId}`);
-  playlistUrl.searchParams.set("market", "from_token");
+  playlistUrl.searchParams.set("market", "US");
   playlistUrl.searchParams.set(
     "fields",
     "name,tracks.items(track(name,artists(name),album(name))),tracks.next"

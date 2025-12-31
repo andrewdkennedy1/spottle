@@ -48,7 +48,7 @@ export default {
                     const errorText = await response.text();
                     console.error("Spotify Token Error:", errorText);
                     return new Response(
-                        JSON.stringify({ error: "Failed to authenticate with Spotify" }),
+                        JSON.stringify({ error: `Spotify Error: ${response.status} ${response.statusText}`, details: errorText }),
                         {
                             status: response.status,
                             headers: { "Content-Type": "application/json", ...corsHeaders }
