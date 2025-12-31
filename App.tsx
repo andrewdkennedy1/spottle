@@ -278,6 +278,15 @@ export default function App() {
         <div className="glass-morphism rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
           {appState === AppState.IDLE && (
             <div className="space-y-8">
+              <div className="rounded-2xl border border-slate-700/60 bg-slate-900/40 p-4 text-xs text-slate-300 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-300">
+                  <ArrowLeftRight size={16} />
+                </div>
+                <div className="space-y-1">
+                  <p className="font-semibold text-white">Two-way transfers</p>
+                  <p className="text-slate-400">Connect both libraries, then tap any playlist to move it to the other service.</p>
+                </div>
+              </div>
               <div className="flex flex-col md:flex-row gap-6 items-stretch">
                 {/* Spotify Section */}
                 <div className="flex-1 flex flex-col gap-4">
@@ -304,7 +313,10 @@ export default function App() {
                         <h3 className="font-bold text-xs text-white uppercase tracking-wider">Your Spotify Playlists</h3>
                         <span className="text-[10px] text-slate-500">{spotifyPlaylists.length} total</span>
                       </div>
-                      <div className="max-h-80 overflow-y-auto space-y-1 p-2 scrollbar-thin scrollbar-thumb-slate-700">
+                      <div className="px-4 py-2 text-[11px] text-slate-400 border-b border-slate-800/70 bg-slate-900/30">
+                        {isAppleAuthorized ? "Tap a playlist to move it to Apple Music." : "Connect Apple Music to enable transfers."}
+                      </div>
+                      <div className="max-h-[50vh] md:max-h-80 overflow-y-auto space-y-1 p-2 scrollbar-thin scrollbar-thumb-slate-700">
                         {loadingSpotifyPlaylists ? (
                           <div className="flex justify-center py-8"><Loader2 className="animate-spin text-indigo-500" /></div>
                         ) : (
@@ -312,7 +324,7 @@ export default function App() {
                             <button
                               key={pl.id}
                               onClick={() => handlePlaylistSelect(pl.id, 'spotify')}
-                              className="w-full text-left p-2 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center gap-3 group"
+                              className="w-full text-left p-3 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center gap-3 group"
                             >
                               {pl.images?.[0]?.url ? (
                                 <img src={pl.images[0].url} className="w-8 h-8 rounded shadow-md object-cover" alt="" />
@@ -356,7 +368,10 @@ export default function App() {
                         <h3 className="font-bold text-xs text-white uppercase tracking-wider">Your Apple Music Playlists</h3>
                         <span className="text-[10px] text-slate-500">{applePlaylists.length} total</span>
                       </div>
-                      <div className="max-h-80 overflow-y-auto space-y-1 p-2 scrollbar-thin scrollbar-thumb-slate-700">
+                      <div className="px-4 py-2 text-[11px] text-slate-400 border-b border-slate-800/70 bg-slate-900/30">
+                        {spotifyToken ? "Tap a playlist to move it to Spotify." : "Connect Spotify to enable transfers."}
+                      </div>
+                      <div className="max-h-[50vh] md:max-h-80 overflow-y-auto space-y-1 p-2 scrollbar-thin scrollbar-thumb-slate-700">
                         {loadingApplePlaylists ? (
                           <div className="flex justify-center py-8"><Loader2 className="animate-spin text-indigo-500" /></div>
                         ) : !isAppleSubscriptionActive ? (
@@ -380,7 +395,7 @@ export default function App() {
                             <button
                               key={pl.id}
                               onClick={() => handlePlaylistSelect(pl.id, 'apple')}
-                              className="w-full text-left p-2 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center gap-3 group"
+                              className="w-full text-left p-3 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center gap-3 group"
                             >
                               <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-slate-400 group-hover:text-red-400 transition-colors">
                                 <Music size={14} />
@@ -397,33 +412,64 @@ export default function App() {
                   )}
                 </div>
               </div>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-slate-700" />
+              <div className="rounded-2xl border border-slate-700/60 bg-slate-900/40 p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <ArrowLeftRight size={16} className="text-indigo-400" />
+                      Manual Import
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Paste a Spotify playlist link or a simple track list.
+                    </p>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500 bg-slate-800/60 px-2 py-1 rounded-full">Optional</span>
                 </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-[#0f172a] px-2 text-slate-500">Or paste raw text</span>
+
+                <div className="space-y-2">
+                  <p className="text-[11px] text-slate-400">Choose where this list lands</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={() => setDirection('spotify-to-apple')}
+                      className={`flex-1 px-4 py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${isSpotifyToApple ? 'bg-red-500/20 border-red-500/50 text-red-200' : 'bg-slate-800/70 border-slate-700 text-slate-300 hover:border-slate-500'}`}
+                    >
+                      <Music size={16} />
+                      To Apple Music
+                    </button>
+                    <button
+                      onClick={() => setDirection('apple-to-spotify')}
+                      className={`flex-1 px-4 py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${!isSpotifyToApple ? 'bg-green-500/20 border-green-500/50 text-green-200' : 'bg-slate-800/70 border-slate-700 text-slate-300 hover:border-slate-500'}`}
+                    >
+                      <Music2 size={16} />
+                      To Spotify
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="relative group">
-                <textarea
-                  className="w-full h-24 bg-slate-800/50 border border-slate-700 rounded-2xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-base"
-                  placeholder="Paste a Spotify link or 'Song - Artist' list..."
-                  value={pastedText}
-                  onChange={(e) => setPastedText(e.target.value)}
-                />
-              </div>
+                <div className="relative">
+                  <textarea
+                    className="w-full min-h-[140px] bg-slate-800/50 border border-slate-700 rounded-2xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-base"
+                    placeholder={"Paste a Spotify link or track list:\nSong - Artist\nArtist - Song\nPlaylist: Road Trip"}
+                    value={pastedText}
+                    onChange={(e) => setPastedText(e.target.value)}
+                  />
+                </div>
 
-              <button
-                onClick={handleTextSubmit}
-                disabled={!pastedText.trim()}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 group"
-              >
-                Parse Manual Input
-                <ChevronRight className="group-hover:translate-x-1 transition-transform" />
-              </button>
+                <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+                  <span className="px-2 py-1 rounded-full bg-slate-800/60">Song - Artist</span>
+                  <span className="px-2 py-1 rounded-full bg-slate-800/60">Artist - Song</span>
+                  <span className="px-2 py-1 rounded-full bg-slate-800/60">Playlist: Name</span>
+                </div>
+
+                <button
+                  onClick={handleTextSubmit}
+                  disabled={!pastedText.trim()}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 group"
+                >
+                  Import and Preview
+                  <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+                </button>
+              </div>
 
               {error && (
                 <div className="flex items-center gap-2 text-red-400 bg-red-400/10 p-4 rounded-xl border border-red-400/20">
