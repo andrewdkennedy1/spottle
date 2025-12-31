@@ -24,6 +24,9 @@ export default function App() {
   const [isAppleAuthorized, setIsAppleAuthorized] = useState(false);
   const [transferProgress, setTransferProgress] = useState(0);
 
+  // Migration State
+  const [direction, setDirection] = useState<'spotify-to-apple' | 'apple-to-spotify'>('spotify-to-apple');
+
   // Spotify State
   const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
   const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
@@ -54,17 +57,33 @@ export default function App() {
     }
   }, []);
 
-  const fetchUserPlaylists = async (token: string) => {
+  const fetchUserPlaylists = async (token?: string) => {
     setLoadingPlaylists(true);
     try {
-      const playlists = await getUserPlaylists(token);
+      let playlists = [];
+      if (direction === 'spotify-to-apple') {
+        if (token || spotifyToken) {
+          playlists = await getUserPlaylists(token || spotifyToken!);
+        }
+      } else {
+        if (isAppleAuthorized) {
+          const { getAppleMusicUserPlaylists } = await import('./services/musicKitService');
+          // @ts-ignore
+          playlists = await getAppleMusicUserPlaylists();
+        }
+      }
       setUserPlaylists(playlists);
     } catch (e) {
-      setError("Failed to load your Spotify playlists.");
+      setError("Failed to load playlists.");
     } finally {
       setLoadingPlaylists(false);
     }
   };
+
+  useEffect(() => {
+    // Re-fetch playlists if direction changes
+    fetchUserPlaylists();
+  }, [direction, isAppleAuthorized, spotifyToken]);
 
   const handleSpotifyLogin = () => {
     window.location.href = '/api/spotify/login';
@@ -74,7 +93,13 @@ export default function App() {
     setAppState(AppState.PROCESSING);
     setError(null);
     try {
-      const data = await fetchSpotifyPlaylist(playlistId, spotifyToken || undefined);
+      let data;
+      if (direction === 'spotify-to-apple') {
+        data = await fetchSpotifyPlaylist(playlistId, spotifyToken || undefined);
+      } else {
+        const { getAppleMusicPlaylist } = await import('./services/musicKitService');
+        data = await getAppleMusicPlaylist(playlistId);
+      }
       setManifest(data);
       setAppState(AppState.PREVIEW);
     } catch (err) {
@@ -115,12 +140,24 @@ export default function App() {
     const updatedTracks = [...manifest.tracks];
     const trackIds: string[] = [];
 
+    // Lazy load services based on direction
+    const { searchAndMatchTrack, createPlaylist } = await import('./services/musicKitService');
+    const { searchSpotifyTrack, createSpotifyPlaylist, addTracksToSpotifyPlaylist, getSpotifyProfile } = await import('./services/playlistService');
+
     for (let i = 0; i < updatedTracks.length; i++) {
       const track = updatedTracks[i];
       updatedTracks[i] = { ...track, status: 'matching' };
       setManifest(prev => prev ? { ...prev, tracks: [...updatedTracks] } : null);
 
-      const matchedId = await searchAndMatchTrack(track);
+      let matchedId: string | null = null;
+
+      if (direction === 'spotify-to-apple') {
+        matchedId = await searchAndMatchTrack(track);
+      } else {
+        if (spotifyToken) {
+          matchedId = await searchSpotifyTrack(track, spotifyToken);
+        }
+      }
 
       if (matchedId) {
         trackIds.push(matchedId);
@@ -136,10 +173,18 @@ export default function App() {
 
     if (trackIds.length > 0) {
       try {
-        await createPlaylist(manifest.name, "Migrated via Spottle", trackIds);
+        if (direction === 'spotify-to-apple') {
+          await createPlaylist(manifest.name, "Migrated via Spottle", trackIds);
+        } else {
+          if (spotifyToken) {
+            const profile = await getSpotifyProfile(spotifyToken);
+            const playlistId = await createSpotifyPlaylist(profile.id, manifest.name, spotifyToken);
+            await addTracksToSpotifyPlaylist(playlistId, trackIds, spotifyToken);
+          }
+        }
         setAppState(AppState.COMPLETED);
       } catch (e) {
-        setError("Failed to create playlist in Apple Music Library.");
+        setError("Failed to create playlist in target library.");
         setAppState(AppState.PREVIEW);
       }
     } else {
@@ -207,61 +252,99 @@ export default function App() {
             <div className="space-y-8">
 
               {/* Setup Connections */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Spotify Card */}
-                <div className={`p-6 rounded-2xl border transition-all ${spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700'}`}>
+              <div className="flex flex-col md:flex-row gap-4 items-stretch relative">
+                {/* Source Card */}
+                <div className={`flex-1 p-6 rounded-2xl border transition-all ${direction === 'spotify-to-apple'
+                    ? (spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700')
+                    : (isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700')
+                  }`}>
                   <div className="flex justify-between items-start mb-4">
-                    <div className="w-10 h-10 rounded-full bg-[#1DB954] flex items-center justify-center text-black">
-                      <Music2 size={20} />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${direction === 'spotify-to-apple' ? 'bg-[#1DB954] text-black' : 'bg-[#FA243C] text-white'}`}>
+                      {direction === 'spotify-to-apple' ? <Music2 size={20} /> : <Music size={20} />}
                     </div>
-                    {spotifyToken && <CheckCircle2 className="text-green-500" size={20} />}
+                    {((direction === 'spotify-to-apple' && spotifyToken) || (direction === 'apple-to-spotify' && isAppleAuthorized)) &&
+                      <CheckCircle2 className={direction === 'spotify-to-apple' ? "text-green-500" : "text-red-500"} size={20} />
+                    }
                   </div>
-                  <h3 className="font-bold text-white mb-1">Spotify (Source)</h3>
-                  <p className="text-xs text-slate-400 mb-4 h-10">Connect your Spotify account to access your playlists.</p>
-                  {!spotifyToken ? (
-                    <button
-                      onClick={handleSpotifyLogin}
-                      className="w-full py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-lg transition-all text-sm"
-                    >
-                      Connect Spotify
-                    </button>
+                  <h3 className="font-bold text-white mb-1">{direction === 'spotify-to-apple' ? 'Spotify' : 'Apple Music'} (Source)</h3>
+                  <p className="text-xs text-slate-400 mb-4 h-10">
+                    {direction === 'spotify-to-apple'
+                      ? 'Connect Spotify to access your playlists.'
+                      : 'Connect Apple Music to access your library.'}
+                  </p>
+
+                  {direction === 'spotify-to-apple' ? (
+                    !spotifyToken ? (
+                      <button onClick={handleSpotifyLogin} className="w-full py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-lg transition-all text-sm">Connect Spotify</button>
+                    ) : (
+                      <button onClick={() => { setSpotifyToken(null); setUserPlaylists([]); }} className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all text-sm">Disconnect</button>
+                    )
                   ) : (
-                    <button
-                      onClick={() => { setSpotifyToken(null); setUserPlaylists([]); }}
-                      className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all text-sm"
-                    >
-                      Disconnect
-                    </button>
+                    !isAppleAuthorized ? (
+                      <button onClick={handleAuthorize} className="w-full py-2 bg-[#FA243C] hover:bg-[#ff364e] text-white font-bold rounded-lg transition-all text-sm">Connect Apple Music</button>
+                    ) : (
+                      <div className="w-full py-2 bg-transparent text-red-400 font-medium text-center text-sm border border-red-500/30 rounded-lg cursor-default">Connected</div>
+                    )
                   )}
                 </div>
 
-                {/* Apple Music Card */}
-                <div className={`p-6 rounded-2xl border transition-all ${isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700'}`}>
+                {/* Swap Button */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 hidden md:block">
+                  <button
+                    onClick={() => setDirection(d => d === 'spotify-to-apple' ? 'apple-to-spotify' : 'spotify-to-apple')}
+                    className="bg-slate-800 p-2 rounded-full border border-slate-600 hover:border-indigo-500 hover:text-indigo-400 text-slate-400 shadow-xl transition-all"
+                  >
+                    <ArrowRight size={20} />
+                  </button>
+                </div>
+                {/* Mobile Swap */}
+                <div className="flex justify-center md:hidden -my-2 z-10">
+                  <button
+                    onClick={() => setDirection(d => d === 'spotify-to-apple' ? 'apple-to-spotify' : 'spotify-to-apple')}
+                    className="bg-slate-800 p-2 rounded-full border border-slate-600 hover:border-indigo-500 hover:text-indigo-400 text-slate-400 shadow-xl transition-all rotate-90"
+                  >
+                    <ArrowRight size={20} />
+                  </button>
+                </div>
+
+                {/* Target Card */}
+                <div className={`flex-1 p-6 rounded-2xl border transition-all ${direction === 'apple-to-spotify'
+                    ? (spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700')
+                    : (isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700')
+                  }`}>
                   <div className="flex justify-between items-start mb-4">
-                    <div className="w-10 h-10 rounded-full bg-[#FA243C] flex items-center justify-center text-white">
-                      <Music size={20} />
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${direction === 'apple-to-spotify' ? 'bg-[#1DB954] text-black' : 'bg-[#FA243C] text-white'}`}>
+                      {direction === 'apple-to-spotify' ? <Music2 size={20} /> : <Music size={20} />}
                     </div>
-                    {isAppleAuthorized && <CheckCircle2 className="text-red-500" size={20} />}
+                    {((direction === 'apple-to-spotify' && spotifyToken) || (direction === 'spotify-to-apple' && isAppleAuthorized)) &&
+                      <CheckCircle2 className={direction === 'apple-to-spotify' ? "text-green-500" : "text-red-500"} size={20} />
+                    }
                   </div>
-                  <h3 className="font-bold text-white mb-1">Apple Music (Target)</h3>
-                  <p className="text-xs text-slate-400 mb-4 h-10">Authorize Apple Music to create playlists in your library.</p>
-                  {!isAppleAuthorized ? (
-                    <button
-                      onClick={handleAuthorize}
-                      className="w-full py-2 bg-[#FA243C] hover:bg-[#ff364e] text-white font-bold rounded-lg transition-all text-sm"
-                    >
-                      Connect Apple Music
-                    </button>
+                  <h3 className="font-bold text-white mb-1">{direction === 'apple-to-spotify' ? 'Spotify' : 'Apple Music'} (Target)</h3>
+                  <p className="text-xs text-slate-400 mb-4 h-10">
+                    {direction === 'apple-to-spotify'
+                      ? 'Connect Spotify to create playlists.'
+                      : 'Authorize Apple Music to create playlists.'}
+                  </p>
+
+                  {direction === 'apple-to-spotify' ? (
+                    !spotifyToken ? (
+                      <button onClick={handleSpotifyLogin} className="w-full py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-lg transition-all text-sm">Connect Spotify</button>
+                    ) : (
+                      <button onClick={() => { setSpotifyToken(null); setUserPlaylists([]); }} className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all text-sm">Disconnect</button>
+                    )
                   ) : (
-                    <div className="w-full py-2 bg-transparent text-red-400 font-medium text-center text-sm border border-red-500/30 rounded-lg cursor-default">
-                      Connected
-                    </div>
+                    !isAppleAuthorized ? (
+                      <button onClick={handleAuthorize} className="w-full py-2 bg-[#FA243C] hover:bg-[#ff364e] text-white font-bold rounded-lg transition-all text-sm">Connect Apple Music</button>
+                    ) : (
+                      <div className="w-full py-2 bg-transparent text-red-400 font-medium text-center text-sm border border-red-500/30 rounded-lg cursor-default">Connected</div>
+                    )
                   )}
                 </div>
               </div>
 
-              {/* Playlist Picker (Only if Spotify Connected) */}
-              {spotifyToken && (
+              {/* Playlist Picker (If Source Connected) */}
+              {((direction === 'spotify-to-apple' && spotifyToken) || (direction === 'apple-to-spotify' && isAppleAuthorized)) && (
                 <div className="bg-slate-800/30 rounded-2xl border border-slate-700 overflow-hidden">
                   <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
                     <h3 className="font-bold text-white flex items-center gap-2">

@@ -1,5 +1,17 @@
 import { Track } from "../types";
 
+export interface SpotifyUser {
+  id: string;
+}
+
+export async function getSpotifyProfile(token: string): Promise<SpotifyUser> {
+  const res = await fetch("https://api.spotify.com/v1/me", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) throw new Error("Failed to fetch Spotify profile");
+  return res.json();
+}
+
 type ParseInput = string | { data: string; mimeType: string };
 
 type ParsedTrack = {
@@ -532,4 +544,62 @@ export async function getSharedPlaylist(id: string): Promise<{ name: string; tra
   const res = await fetch(`/api/playlist/${id}`);
   if (!res.ok) throw new Error("Playlist not found");
   return res.json();
+}
+
+export async function searchSpotifyTrack(track: Track, token: string): Promise<string | null> {
+  const query = `${track.title} ${track.artist}`;
+  const encQuery = encodeURIComponent(query);
+  try {
+    const res = await fetch(`https://api.spotify.com/v1/search?q=${encQuery}&type=track&limit=1`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const items = data.tracks?.items;
+    if (items && items.length > 0) {
+      return items[0].uri; // URI for adding to playlist
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function createSpotifyPlaylist(userId: string, name: string, token: string): Promise<string> {
+  const res = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      name: name,
+      description: "Migrated via Spottle",
+      public: false
+    })
+  });
+  if (!res.ok) throw new Error("Failed to create Spotify playlist");
+  const data = await res.json();
+  return data.id;
+}
+
+export async function addTracksToSpotifyPlaylist(playlistId: string, uris: string[], token: string): Promise<void> {
+  // Spotify limits adding 100 tracks at a time
+  const chunks = [];
+  for (let i = 0; i < uris.length; i += 100) {
+    chunks.push(uris.slice(i, i + 100));
+  }
+
+  for (const chunk of chunks) {
+    await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        uris: chunk
+      })
+    });
+  }
 }

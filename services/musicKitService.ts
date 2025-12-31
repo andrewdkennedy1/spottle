@@ -84,3 +84,40 @@ export async function createPlaylist(name: string, description: string, trackIds
 
     return mk.api.library.playlist.create(payload);
 }
+
+export async function getAppleMusicUserPlaylists(): Promise<{ id: string; name: string; tracks: { total: number } }[]> {
+    const mk = window.MusicKit.getInstance();
+    if (!mk.isAuthorized) return [];
+
+    try {
+        const result = await mk.api.library.playlists(null, { limit: 100 });
+        return result.map((p: any) => ({
+            id: p.id,
+            name: p.attributes.name,
+            tracks: { total: p.attributes.trackCount || 0 } // heuristics, might need detailed fetch if trackCount missing
+        }));
+    } catch (e) {
+        console.error("Failed to fetch Apple Music playlists", e);
+        return [];
+    }
+}
+
+export async function getAppleMusicPlaylist(playlistId: string): Promise<{ name: string; tracks: Track[] }> {
+    const mk = window.MusicKit.getInstance();
+    const playlist = await mk.api.library.playlist(playlistId);
+
+    // tracks might need to be fetched if not fully hydrated or paginated, 
+    // but for now assumig simple access
+    const tracksRel = playlist.relationships?.tracks?.data || [];
+
+    return {
+        name: playlist.attributes.name,
+        tracks: tracksRel.map((t: any) => ({
+            id: t.id,
+            title: t.attributes.name,
+            artist: t.attributes.artistName,
+            album: t.attributes.albumName,
+            status: 'pending' // Default status for migration
+        }))
+    };
+}
