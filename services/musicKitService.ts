@@ -10,6 +10,24 @@ declare global {
 
 let musicKitInstance: any = null;
 
+function normalizeResourceArray(value: any): any[] {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (Array.isArray(value.data)) return value.data;
+    if (Array.isArray(value.items)) return value.items;
+    if (Array.isArray(value.data?.data)) return value.data.data;
+    if (Array.isArray(value.data?.items)) return value.data.items;
+    if (Array.isArray(value.results)) return value.results;
+    return [];
+}
+
+function pickFirstResource(value: any): any | null {
+    const items = normalizeResourceArray(value);
+    if (items.length) return items[0];
+    if (value?.data && !Array.isArray(value.data)) return value.data;
+    return value ?? null;
+}
+
 export async function initializeMusicKit(): Promise<any> {
     if (musicKitInstance) return musicKitInstance;
 
@@ -118,12 +136,14 @@ export async function getAppleMusicUserPlaylists(): Promise<{ id: string; name: 
     if (!mk.isAuthorized) return [];
 
     try {
-        const result = await mk.api.library.playlists(null, { limit: 100 });
-        const playlists = Array.isArray((result as any)?.data)
-            ? (result as any).data
-            : Array.isArray(result)
-                ? result
-                : [];
+        let result: any;
+        try {
+            result = await mk.api.library.playlists({ limit: 100 });
+        } catch (err) {
+            result = await mk.api.library.playlists(null, { limit: 100 });
+        }
+
+        const playlists = normalizeResourceArray(result);
         return playlists.map((p: any) => ({
             id: p.id,
             name: p.attributes?.name ?? "Untitled Playlist",
@@ -134,28 +154,34 @@ export async function getAppleMusicUserPlaylists(): Promise<{ id: string; name: 
             throw new Error("SUBSCRIPTION_REQUIRED");
         }
         console.error("Failed to fetch Apple Music playlists", e);
-        return [];
+        throw e;
     }
 }
 
 export async function getAppleMusicPlaylist(playlistId: string): Promise<{ name: string; tracks: Track[] }> {
     const mk = window.MusicKit.getInstance();
     const playlistResponse = await mk.api.library.playlist(playlistId, { include: "tracks" });
-    const playlist = (playlistResponse as any)?.data ?? playlistResponse;
+    const playlist = pickFirstResource(playlistResponse);
 
-    // tracks might need to be fetched if not fully hydrated or paginated
-    const tracksRel = playlist?.relationships?.tracks?.data || [];
+    const included = normalizeResourceArray((playlistResponse as any)?.included);
+    const includedById = new Map(included.map((item: any) => [item.id, item]));
 
-    const tracks = tracksRel
+    const trackRefs = normalizeResourceArray(
+        playlist?.relationships?.tracks?.data ?? playlist?.tracks?.data ?? playlist?.tracks
+    );
+    const sourceTracks = trackRefs.length ? trackRefs : included;
+
+    const tracks = sourceTracks
         .map((t: any) => {
-            const title = t.attributes?.name ?? "";
-            const artist = t.attributes?.artistName ?? "";
+            const resolved = includedById.get(t.id) ?? t;
+            const title = resolved.attributes?.name ?? "";
+            const artist = resolved.attributes?.artistName ?? "";
             if (!title || !artist) return null;
             return {
-                id: t.id,
+                id: resolved.id ?? t.id,
                 title: title,
                 artist: artist,
-                album: t.attributes?.albumName ?? "",
+                album: resolved.attributes?.albumName ?? "",
                 status: "pending" as const
             };
         })
