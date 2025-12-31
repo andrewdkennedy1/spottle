@@ -228,9 +228,9 @@ export default function App() {
                 Music Teleporter
               </span>
             </h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto italic">
-              Spotify to Apple Music? Apple Music to Spotify? <br />
-              Melissa's brother made it go both ways because he's a wizard (and it has no choice).
+            <p className="text-slate-400 text-lg max-w-xl mx-auto">
+              One bridge, two worlds. Effortlessly teleporting Melissa's playlists <br />
+              between Spotify and Apple Music with brotherly precision.
             </p>
           </div>
         )}
