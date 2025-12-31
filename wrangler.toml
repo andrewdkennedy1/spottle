@@ -1,4 +1,5 @@
 name = "spottle"
+main = "workers/api.ts"
 compatibility_date = "2025-02-03"
 assets = { directory = "./dist" }
 

@@ -124,7 +124,7 @@ async function getSpotifyAccessToken(): Promise<string> {
   let response: Response;
   try {
     response = await fetch(
-      "https://open.spotify.com/get_access_token?reason=transport&productType=web_player",
+      "/api/spotify-token",
       {
         headers: {
           Accept: "application/json"
