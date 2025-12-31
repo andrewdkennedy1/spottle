@@ -546,26 +546,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Features / Benefits */}
-        {appState === AppState.IDLE && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
-            <FeatureCard
-              icon={<Music className="text-indigo-400" />}
-              title="Smart Search"
-              description="We search the target catalog to find the exact match for every track."
-            />
-            <FeatureCard
-              icon={<CheckCircle2 className="text-green-400" />}
-              title="Direct Integration"
-              description="Playlists are created directly in your destination library instantly."
-            />
-            <FeatureCard
-              icon={<ListMusic className="text-amber-400" />}
-              title="Full Playlists"
-              description="Migrate entire playlists without size limits."
-            />
-          </div>
-        )}
       </main>
 
       <footer className="mt-auto py-8 text-slate-500 text-xs flex flex-col items-center gap-2">
@@ -576,18 +556,6 @@ export default function App() {
           <span className="hover:text-indigo-400 cursor-pointer transition-colors underline decoration-slate-700 underline-offset-4">API Status</span>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function FeatureCard({ icon, title, description }: { icon: React.ReactNode, title: string, description: string }) {
-  return (
-    <div className="glass-morphism p-6 rounded-2xl space-y-3 hover:border-indigo-500/50 transition-colors group cursor-default">
-      <div className="w-10 h-10 bg-white/5 rounded-lg flex items-center justify-center group-hover:bg-indigo-500/10 transition-colors">
-        {icon}
-      </div>
-      <h4 className="font-bold text-white">{title}</h4>
-      <p className="text-sm text-slate-400 leading-relaxed">{description}</p>
     </div>
   );
 }
