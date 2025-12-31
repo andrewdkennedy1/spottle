@@ -13,7 +13,8 @@ import {
   ChevronRight,
   Music2,
   ListMusic,
-  LogOut
+  LogOut,
+  ArrowLeftRight
 } from 'lucide-react';
 
 export default function App() {
@@ -255,8 +256,8 @@ export default function App() {
               <div className="flex flex-col md:flex-row gap-4 items-stretch relative">
                 {/* Source Card */}
                 <div className={`flex-1 p-6 rounded-2xl border transition-all ${direction === 'spotify-to-apple'
-                    ? (spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700')
-                    : (isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700')
+                  ? (spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700')
+                  : (isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700')
                   }`}>
                   <div className="flex justify-between items-start mb-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${direction === 'spotify-to-apple' ? 'bg-[#1DB954] text-black' : 'bg-[#FA243C] text-white'}`}>
@@ -292,9 +293,9 @@ export default function App() {
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 hidden md:block">
                   <button
                     onClick={() => setDirection(d => d === 'spotify-to-apple' ? 'apple-to-spotify' : 'spotify-to-apple')}
-                    className="bg-slate-800 p-2 rounded-full border border-slate-600 hover:border-indigo-500 hover:text-indigo-400 text-slate-400 shadow-xl transition-all"
+                    className="bg-slate-800 p-2 rounded-full border border-slate-600 hover:border-indigo-500 hover:text-indigo-400 text-slate-400 shadow-xl transition-all group"
                   >
-                    <ArrowRight size={20} />
+                    <ArrowLeftRight size={20} className="group-hover:rotate-180 transition-transform" />
                   </button>
                 </div>
                 {/* Mobile Swap */}
@@ -303,14 +304,14 @@ export default function App() {
                     onClick={() => setDirection(d => d === 'spotify-to-apple' ? 'apple-to-spotify' : 'spotify-to-apple')}
                     className="bg-slate-800 p-2 rounded-full border border-slate-600 hover:border-indigo-500 hover:text-indigo-400 text-slate-400 shadow-xl transition-all rotate-90"
                   >
-                    <ArrowRight size={20} />
+                    <ArrowLeftRight size={20} />
                   </button>
                 </div>
 
                 {/* Target Card */}
                 <div className={`flex-1 p-6 rounded-2xl border transition-all ${direction === 'apple-to-spotify'
-                    ? (spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700')
-                    : (isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700')
+                  ? (spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700')
+                  : (isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700')
                   }`}>
                   <div className="flex justify-between items-start mb-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${direction === 'apple-to-spotify' ? 'bg-[#1DB954] text-black' : 'bg-[#FA243C] text-white'}`}>
@@ -554,12 +555,12 @@ export default function App() {
             <FeatureCard
               icon={<Music className="text-indigo-400" />}
               title="Smart Search"
-              description="We search the Apple Music catalog for the best match for every track."
+              description="We search the target catalog to find the exact match for every track."
             />
             <FeatureCard
               icon={<CheckCircle2 className="text-green-400" />}
               title="Direct Integration"
-              description="Tracks are added directly to your iCloud Music Library instantly."
+              description="Playlists are created directly in your destination library instantly."
             />
             <FeatureCard
               icon={<ListMusic className="text-amber-400" />}
