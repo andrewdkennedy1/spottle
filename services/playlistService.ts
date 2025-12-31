@@ -8,6 +8,42 @@ type ParsedTrack = {
   album: string;
 };
 
+type SpotifyAccessTokenResponse = {
+  accessToken?: string;
+  accessTokenExpirationTimestampMs?: number;
+};
+
+type SpotifyArtist = {
+  name?: string;
+};
+
+type SpotifyAlbum = {
+  name?: string;
+};
+
+type SpotifyTrack = {
+  name?: string;
+  artists?: SpotifyArtist[];
+  album?: SpotifyAlbum | null;
+};
+
+type SpotifyPlaylistTrackItem = {
+  track?: SpotifyTrack | null;
+};
+
+type SpotifyPlaylistResponse = {
+  name?: string;
+  tracks?: {
+    items?: SpotifyPlaylistTrackItem[];
+    next?: string | null;
+  };
+};
+
+type SpotifyTracksPage = {
+  items?: SpotifyPlaylistTrackItem[];
+  next?: string | null;
+};
+
 const TITLE_HINTS = [
   "remix",
   "mix",
@@ -30,6 +66,20 @@ function isStandaloneUrl(value: string): boolean {
   return /^https?:\/\/\S+$/i.test(value.trim());
 }
 
+function isSingleToken(value: string): boolean {
+  return !/\s/.test(value.trim());
+}
+
+function normalizeSpotifyUrl(value: string): URL | null {
+  const trimmed = value.trim();
+  const withScheme = /^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(withScheme);
+  } catch {
+    return null;
+  }
+}
+
 function stripLinePrefix(line: string): string {
   let cleaned = line.trim();
   cleaned = cleaned.replace(/^\s*\d+\s*[\.\)\-:]\s*/, "");
@@ -43,6 +93,137 @@ function cleanField(value: string): string {
     .replace(/[\"'`]+$/, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractSpotifyPlaylistId(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || !isSingleToken(trimmed)) {
+    return null;
+  }
+
+  const uriMatch = trimmed.match(/^spotify:playlist:([a-zA-Z0-9]+)$/);
+  if (uriMatch) {
+    return uriMatch[1];
+  }
+
+  const url = normalizeSpotifyUrl(trimmed);
+  if (!url) {
+    return null;
+  }
+
+  const host = url.hostname.toLowerCase();
+  if (!host.endsWith("spotify.com")) {
+    return null;
+  }
+
+  const pathMatch = url.pathname.match(/\/(?:embed\/)?playlist\/([a-zA-Z0-9]+)/i);
+  return pathMatch ? pathMatch[1] : null;
+}
+
+async function getSpotifyAccessToken(): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(
+      "https://open.spotify.com/get_access_token?reason=transport&productType=web_player",
+      {
+        headers: {
+          Accept: "application/json"
+        }
+      }
+    );
+  } catch {
+    throw new Error("Spotify link could not be accessed. Paste the track list instead.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Spotify link could not be accessed. Paste the track list instead.");
+  }
+
+  const data = (await response.json()) as SpotifyAccessTokenResponse;
+  if (!data.accessToken) {
+    throw new Error("Spotify link could not be accessed. Paste the track list instead.");
+  }
+
+  return data.accessToken;
+}
+
+async function fetchSpotifyPlaylist(
+  playlistId: string
+): Promise<{ name: string; tracks: Track[] }> {
+  const token = await getSpotifyAccessToken();
+  const headers = {
+    Authorization: `Bearer ${token}`
+  };
+
+  const playlistUrl = new URL(`https://api.spotify.com/v1/playlists/${playlistId}`);
+  playlistUrl.searchParams.set("market", "from_token");
+  playlistUrl.searchParams.set(
+    "fields",
+    "name,tracks.items(track(name,artists(name),album(name))),tracks.next"
+  );
+
+  const items: SpotifyPlaylistTrackItem[] = [];
+  let name = "";
+  let nextUrl: string | null = playlistUrl.toString();
+
+  while (nextUrl) {
+    let response: Response;
+    try {
+      response = await fetch(nextUrl, { headers });
+    } catch {
+      throw new Error("Spotify request failed. Paste the track list instead.");
+    }
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error("Spotify playlist not found or not public.");
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("Spotify playlist could not be accessed. Paste the track list instead.");
+      }
+      throw new Error("Spotify request failed. Paste the track list instead.");
+    }
+
+    const data = (await response.json()) as SpotifyPlaylistResponse | SpotifyTracksPage;
+    if ("tracks" in data) {
+      if (!name && data.name) {
+        name = data.name;
+      }
+      if (Array.isArray(data.tracks?.items)) {
+        items.push(...data.tracks.items);
+      }
+      nextUrl = data.tracks?.next ?? null;
+    } else {
+      if (Array.isArray(data.items)) {
+        items.push(...data.items);
+      }
+      nextUrl = data.next ?? null;
+    }
+  }
+
+  const trackList = items
+    .map((item) => item.track)
+    .filter((track): track is SpotifyTrack => Boolean(track))
+    .map((track) => ({
+      title: cleanField(track.name ?? ""),
+      artist: cleanField(
+        track.artists?.map((artist) => artist.name ?? "").filter(Boolean).join(", ") ?? ""
+      ),
+      album: cleanField(track.album?.name ?? "")
+    }))
+    .filter((track) => track.title && track.artist);
+
+  if (!trackList.length) {
+    throw new Error("No tracks found in the Spotify playlist.");
+  }
+
+  return {
+    name: cleanField(name) || "Spotify Playlist",
+    tracks: trackList.map((track, index) => ({
+      ...track,
+      id: `track-${index}`,
+      status: "pending"
+    }))
+  };
 }
 
 function scoreTitle(value: string): number {
@@ -225,8 +406,13 @@ export async function parsePlaylistData(input: ParseInput): Promise<{ name: stri
     throw new Error("Paste a track list to continue.");
   }
 
+  const spotifyPlaylistId = extractSpotifyPlaylistId(text);
+  if (spotifyPlaylistId) {
+    return fetchSpotifyPlaylist(spotifyPlaylistId);
+  }
+
   if (isStandaloneUrl(text)) {
-    throw new Error("Playlist links are not supported. Paste the track list instead.");
+    throw new Error("Only Spotify playlist links are supported. Paste the track list instead.");
   }
 
   const lines = splitCandidateLines(text);

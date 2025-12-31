@@ -116,7 +116,7 @@ export default function App() {
               </span>
             </h2>
             <p className="text-slate-400 text-lg max-w-xl mx-auto">
-              Paste a track list like "Song - Artist" or "Artist - Song" and we'll build an Apple Music import link.
+              Paste a track list like "Song - Artist" or a Spotify playlist link and we'll build an Apple Music import link.
             </p>
           </div>
         )}
@@ -128,7 +128,7 @@ export default function App() {
               <div className="relative group">
                 <textarea
                   className="w-full h-48 bg-slate-800/50 border border-slate-700 rounded-2xl p-6 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-lg leading-relaxed"
-                  placeholder="Paste a track list (Song - Artist, Artist - Song, or Song by Artist)..."
+                  placeholder="Paste a Spotify playlist link or a track list (Song - Artist, Artist - Song, or Song by Artist)..."
                   value={pastedText}
                   onChange={(e) => setPastedText(e.target.value)}
                 />
@@ -139,7 +139,7 @@ export default function App() {
                 disabled={!pastedText.trim()}
                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 group"
               >
-                Parse Track List
+                Parse Playlist
                 <ChevronRight className="group-hover:translate-x-1 transition-transform" />
               </button>
 
@@ -302,8 +302,8 @@ export default function App() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
             <FeatureCard 
               icon={<Music className="text-indigo-400" />}
-              title="Track List Parsing"
-              description="Paste songs as 'Title - Artist', 'Artist - Title', or 'Title by Artist'."
+              title="Playlist Parsing"
+              description="Paste a Spotify playlist link or songs as 'Title - Artist', 'Artist - Title', or 'Title by Artist'."
             />
             <FeatureCard 
               icon={<QrCode className="text-green-400" />}
