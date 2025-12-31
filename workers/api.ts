@@ -178,7 +178,7 @@ export default {
             const proto = request.headers.get("X-Forwarded-Proto") || "https";
             const finalRedirectUri = host ? `${proto}://${host}/api/spotify/callback` : redirectUri;
 
-            const scope = "playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private";
+            const scope = "user-read-private playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private";
             const state = crypto.randomUUID();
 
             const spotifyUrl = `https://accounts.spotify.com/authorize?` + new URLSearchParams({

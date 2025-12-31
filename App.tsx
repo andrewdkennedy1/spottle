@@ -38,6 +38,17 @@ export default function App() {
   const [loadingApplePlaylists, setLoadingApplePlaylists] = useState(false);
   const [isAppleSubscriptionActive, setIsAppleSubscriptionActive] = useState(true);
 
+  const isSpotifyToApple = direction === 'spotify-to-apple';
+  const needsAppleAuth = isSpotifyToApple && !isAppleAuthorized;
+  const needsSpotifyAuth = !isSpotifyToApple && !spotifyToken;
+  const targetServiceName = isSpotifyToApple ? 'Apple Music' : 'Spotify';
+  const targetTransferLabel = isSpotifyToApple ? 'Transfer to Apple Music' : 'Transfer to Spotify';
+  const targetLibraryUrl = isSpotifyToApple
+    ? 'https://music.apple.com/library/playlists'
+    : 'https://open.spotify.com/collection/playlists';
+  const targetOpenLabel = isSpotifyToApple ? 'Open Apple Music' : 'Open Spotify';
+  const directionLabel = isSpotifyToApple ? 'Spotify → Apple' : 'Apple → Spotify';
+
   useEffect(() => {
     // Initialize MusicKit
     initializeMusicKit().then(() => {
@@ -159,6 +170,14 @@ export default function App() {
 
   const startMigration = async () => {
     if (!manifest) return;
+    if (direction === 'spotify-to-apple' && !isAppleAuthorized) {
+      setError("Connect Apple Music to continue.");
+      return;
+    }
+    if (direction === 'apple-to-spotify' && !spotifyToken) {
+      setError("Connect Spotify to continue.");
+      return;
+    }
     setAppState(AppState.SYNCING);
     setTransferProgress(0);
 
@@ -436,6 +455,7 @@ export default function App() {
                 <div>
                   <div className="flex items-center gap-3 mb-1">
                     <div className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-[10px] font-bold tracking-wider">MANIFEST</div>
+                    <div className="px-2 py-0.5 bg-slate-700/50 text-slate-300 rounded text-[10px] font-bold tracking-wider">{directionLabel}</div>
                     <h3 className="text-2xl font-bold text-white">{manifest.name}</h3>
                   </div>
                   <p className="text-slate-400">{manifest.tracks.length} tracks identified</p>
@@ -445,20 +465,28 @@ export default function App() {
                     <button onClick={reset} className="p-3 hover:bg-slate-700 rounded-xl transition-colors text-slate-400 border border-slate-700">
                       <Trash2 size={20} />
                     </button>
-                    {!isAppleAuthorized ? (
+                    {needsAppleAuth ? (
                       <button
                         onClick={handleAuthorize}
                         className="flex-1 sm:flex-none px-8 py-3 bg-red-500 hover:bg-red-400 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-600/30"
                       >
                         <Music size={18} />
-                        Login to Apple Music
+                        Connect Apple Music
+                      </button>
+                    ) : needsSpotifyAuth ? (
+                      <button
+                        onClick={handleSpotifyLogin}
+                        className="flex-1 sm:flex-none px-8 py-3 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-green-600/30"
+                      >
+                        <Music2 size={18} />
+                        Connect Spotify
                       </button>
                     ) : (
                       <button
                         onClick={startMigration}
                         className="flex-1 sm:flex-none px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30"
                       >
-                        Transfer to Library
+                        {targetTransferLabel}
                         <ArrowRight size={18} />
                       </button>
                     )}
@@ -529,16 +557,16 @@ export default function App() {
                   </div>
                   <h2 className="text-3xl font-bold text-white">Migration Complete!</h2>
                   <p className="text-slate-300 text-center max-w-md">
-                    The playlist <strong>{manifest.name}</strong> has been created in your Apple Music Library.
+                    The playlist <strong>{manifest.name}</strong> has been created in your {targetServiceName} library.
                   </p>
                   <a
-                    href="https://music.apple.com/library/playlists"
+                    href={targetLibraryUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="px-6 py-3 bg-white text-slate-900 rounded-xl font-bold hover:bg-slate-200 transition-colors flex items-center gap-2"
                   >
                     <ListMusic size={18} />
-                    Open Apple Music
+                    {targetOpenLabel}
                   </a>
                 </div>
               )}

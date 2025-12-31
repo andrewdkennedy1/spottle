@@ -13,20 +13,20 @@ let musicKitInstance: any = null;
 export async function initializeMusicKit(): Promise<any> {
     if (musicKitInstance) return musicKitInstance;
 
-    // Wait for the script to load if it hasn't yet
-    if (!window.MusicKit) {
-        let attempts = 0;
-        while (!window.MusicKit && attempts < 10) {
-            await new Promise(r => setTimeout(r, 500));
-            attempts++;
-        }
-    }
-
-    if (!window.MusicKit) {
-        throw new Error("MusicKit JS not loaded");
-    }
-
     try {
+        // Wait for the script to load if it hasn't yet
+        if (!window.MusicKit) {
+            let attempts = 0;
+            while (!window.MusicKit && attempts < 10) {
+                await new Promise(r => setTimeout(r, 500));
+                attempts++;
+            }
+        }
+
+        if (!window.MusicKit) {
+            throw new Error("MusicKit JS not loaded");
+        }
+
         console.log("Fetching Apple developer token...");
         const response = await fetch("/api/apple-token");
         if (!response.ok) {
@@ -119,13 +119,18 @@ export async function getAppleMusicUserPlaylists(): Promise<{ id: string; name: 
 
     try {
         const result = await mk.api.library.playlists(null, { limit: 100 });
-        return result.map((p: any) => ({
+        const playlists = Array.isArray((result as any)?.data)
+            ? (result as any).data
+            : Array.isArray(result)
+                ? result
+                : [];
+        return playlists.map((p: any) => ({
             id: p.id,
-            name: p.attributes.name,
-            tracks: { total: p.attributes.trackCount || 0 } // heuristics, might need detailed fetch if trackCount missing
+            name: p.attributes?.name ?? "Untitled Playlist",
+            tracks: { total: p.attributes?.trackCount ?? 0 }
         }));
     } catch (e: any) {
-        if (e.status === '403' || e.httpStatusCode === 403) {
+        if (e.status === 403 || e.status === "403" || e.httpStatusCode === 403) {
             throw new Error("SUBSCRIPTION_REQUIRED");
         }
         console.error("Failed to fetch Apple Music playlists", e);
@@ -135,20 +140,29 @@ export async function getAppleMusicUserPlaylists(): Promise<{ id: string; name: 
 
 export async function getAppleMusicPlaylist(playlistId: string): Promise<{ name: string; tracks: Track[] }> {
     const mk = window.MusicKit.getInstance();
-    const playlist = await mk.api.library.playlist(playlistId);
+    const playlistResponse = await mk.api.library.playlist(playlistId, { include: "tracks" });
+    const playlist = (playlistResponse as any)?.data ?? playlistResponse;
 
-    // tracks might need to be fetched if not fully hydrated or paginated, 
-    // but for now assumig simple access
-    const tracksRel = playlist.relationships?.tracks?.data || [];
+    // tracks might need to be fetched if not fully hydrated or paginated
+    const tracksRel = playlist?.relationships?.tracks?.data || [];
+
+    const tracks = tracksRel
+        .map((t: any) => {
+            const title = t.attributes?.name ?? "";
+            const artist = t.attributes?.artistName ?? "";
+            if (!title || !artist) return null;
+            return {
+                id: t.id,
+                title: title,
+                artist: artist,
+                album: t.attributes?.albumName ?? "",
+                status: "pending" as const
+            };
+        })
+        .filter((track: Track | null): track is Track => Boolean(track));
 
     return {
-        name: playlist.attributes.name,
-        tracks: tracksRel.map((t: any) => ({
-            id: t.id,
-            title: t.attributes.name,
-            artist: t.attributes.artistName,
-            album: t.attributes.albumName,
-            status: 'pending' // Default status for migration
-        }))
+        name: playlist?.attributes?.name ?? "Apple Music Playlist",
+        tracks
     };
 }
