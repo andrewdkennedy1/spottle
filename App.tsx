@@ -236,13 +236,14 @@ export default function App() {
         {appState === AppState.IDLE && (
           <div className="text-center space-y-4 mb-8">
             <h2 className="text-4xl md:text-5xl font-extrabold text-white">
-              Bridge your playlists <br />
+              Melissa's Magical <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-indigo-500">
-                directly to Apple Music
+                Music Teleporter
               </span>
             </h2>
-            <p className="text-slate-400 text-lg max-w-xl mx-auto">
-              Select a Spotify playlist or paste a link, and we'll recreate it in your Apple Music Library instantly.
+            <p className="text-slate-400 text-lg max-w-xl mx-auto italic">
+              Spotify to Apple Music? Apple Music to Spotify? <br />
+              Melissa's brother made it go both ways because he's a wizard (and it has no choice).
             </p>
           </div>
         )}
