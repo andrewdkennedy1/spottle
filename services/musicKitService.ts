@@ -26,29 +26,30 @@ export async function initializeMusicKit(): Promise<any> {
         throw new Error("MusicKit JS not loaded");
     }
 
-    console.log("Fetching Apple developer token...");
-    const response = await fetch("/api/apple-token");
-    if (!response.ok) {
-        const errBody = await response.text();
-        throw new Error(`Failed to fetch developer token: ${response.status} ${errBody}`);
-    }
-    const { token } = await response.json();
-    console.log("Developer token received. Configuring MusicKit...");
-
-    musicKitInstance = await window.MusicKit.configure({
-        developerToken: token,
-        app: {
-            name: "Spottle",
-            build: "1.0.0"
+    try {
+        console.log("Fetching Apple developer token...");
+        const response = await fetch("/api/apple-token");
+        if (!response.ok) {
+            const errBody = await response.text();
+            throw new Error(`Failed to fetch developer token: ${response.status} ${errBody}`);
         }
-    });
+        const { token } = await response.json();
+        console.log("Developer token received. Configuring MusicKit...");
 
-    console.log("MusicKit configured successfully.");
-    return musicKitInstance;
-} catch (error) {
-    console.error("CRITICAL: Failed to initialize MusicKit", error);
-    throw error;
-}
+        musicKitInstance = await window.MusicKit.configure({
+            developerToken: token,
+            app: {
+                name: "Spottle",
+                build: "1.0.0"
+            }
+        });
+
+        console.log("MusicKit configured successfully.");
+        return musicKitInstance;
+    } catch (error) {
+        console.error("CRITICAL: Failed to initialize MusicKit", error);
+        throw error;
+    }
 }
 
 export async function authorizeUser(): Promise<boolean> {
