@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "wrangler pages deploy dist --project-name spottle --branch production",
-    "cf:deploy": "wrangler pages deploy dist --project-name spottle --branch production"
+    "deploy": "wrangler deploy",
+    "cf:deploy": "wrangler deploy"
   },
   "dependencies": {
     "react": "^19.2.3",
