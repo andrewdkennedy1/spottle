@@ -21,7 +21,7 @@ export async function initializeMusicKit(): Promise<any> {
         musicKitInstance = await window.MusicKit.configure({
             developerToken: token,
             app: {
-                name: "SoundBridge",
+                name: "Spottle",
                 build: "1.0.0"
             }
         });

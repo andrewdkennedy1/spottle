@@ -173,7 +173,12 @@ export default function App() {
                 <CheckCircle2 size={12} /> Connected to Apple Music
               </div>
             ) : (
-              <span className="text-xs font-medium text-slate-300">Not connected to Apple Music</span>
+              <button
+                onClick={handleAuthorize}
+                className="text-xs font-medium text-slate-300 hover:text-white hover:underline transition-colors"
+              >
+                Not connected to Apple Music (Login)
+              </button>
             )}
           </div>
           <span className="text-[10px] text-slate-500 italic pr-2">Built for Melissa (but you can use it too)</span>
@@ -201,49 +206,95 @@ export default function App() {
           {appState === AppState.IDLE && (
             <div className="space-y-8">
 
-              {/* Spotify Login / Playlist Picker */}
-              {!spotifyToken ? (
-                <div className="text-center bg-slate-800/30 p-8 rounded-2xl border border-dashed border-slate-700">
-                  <h3 className="text-xl font-bold text-white mb-2">Transfer from your account</h3>
-                  <p className="text-slate-400 mb-6">Connect Spotify to choose from your library.</p>
-                  <button
-                    onClick={handleSpotifyLogin}
-                    className="px-8 py-3 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full transition-all flex items-center gap-2 mx-auto"
-                  >
-                    Connect Spotify
-                  </button>
-                </div>
-              ) : (
-                <div className="max-h-64 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-slate-700">
-                  <div className="flex justify-between items-center mb-4 sticky top-0 bg-[#0f172a] p-2 z-10 border-b border-slate-800">
-                    <h3 className="font-bold text-white">Your Playlists</h3>
-                    <button onClick={() => { setSpotifyToken(null); setUserPlaylists([]); }} className="text-xs text-red-400 flex items-center gap-1 hover:underline">
-                      <LogOut size={12} /> Disconnect
+              {/* Setup Connections */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Spotify Card */}
+                <div className={`p-6 rounded-2xl border transition-all ${spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700'}`}>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-10 h-10 rounded-full bg-[#1DB954] flex items-center justify-center text-black">
+                      <Music2 size={20} />
+                    </div>
+                    {spotifyToken && <CheckCircle2 className="text-green-500" size={20} />}
+                  </div>
+                  <h3 className="font-bold text-white mb-1">Spotify (Source)</h3>
+                  <p className="text-xs text-slate-400 mb-4 h-10">Connect your Spotify account to access your playlists.</p>
+                  {!spotifyToken ? (
+                    <button
+                      onClick={handleSpotifyLogin}
+                      className="w-full py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-lg transition-all text-sm"
+                    >
+                      Connect Spotify
                     </button>
+                  ) : (
+                    <button
+                      onClick={() => { setSpotifyToken(null); setUserPlaylists([]); }}
+                      className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all text-sm"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </div>
+
+                {/* Apple Music Card */}
+                <div className={`p-6 rounded-2xl border transition-all ${isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700'}`}>
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-10 h-10 rounded-full bg-[#FA243C] flex items-center justify-center text-white">
+                      <Music size={20} />
+                    </div>
+                    {isAppleAuthorized && <CheckCircle2 className="text-red-500" size={20} />}
+                  </div>
+                  <h3 className="font-bold text-white mb-1">Apple Music (Target)</h3>
+                  <p className="text-xs text-slate-400 mb-4 h-10">Authorize Apple Music to create playlists in your library.</p>
+                  {!isAppleAuthorized ? (
+                    <button
+                      onClick={handleAuthorize}
+                      className="w-full py-2 bg-[#FA243C] hover:bg-[#ff364e] text-white font-bold rounded-lg transition-all text-sm"
+                    >
+                      Connect Apple Music
+                    </button>
+                  ) : (
+                    <div className="w-full py-2 bg-transparent text-red-400 font-medium text-center text-sm border border-red-500/30 rounded-lg cursor-default">
+                      Connected
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Playlist Picker (Only if Spotify Connected) */}
+              {spotifyToken && (
+                <div className="bg-slate-800/30 rounded-2xl border border-slate-700 overflow-hidden">
+                  <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
+                    <h3 className="font-bold text-white flex items-center gap-2">
+                      <ListMusic size={18} className="text-indigo-400" />
+                      Select a Playlist
+                    </h3>
+                    <span className="text-xs text-slate-500">{userPlaylists.length} playlists found</span>
                   </div>
 
-                  {loadingPlaylists ? (
-                    <div className="flex justify-center py-8"><Loader2 className="animate-spin text-indigo-500" /></div>
-                  ) : (
-                    userPlaylists.map(pl => (
-                      <button
-                        key={pl.id}
-                        onClick={() => handlePlaylistSelect(pl.id)}
-                        className="w-full text-left p-3 hover:bg-slate-700/50 rounded-xl transition-colors flex items-center gap-3 group"
-                      >
-                        {pl.images?.[0]?.url ? (
-                          <img src={pl.images[0].url} className="w-10 h-10 rounded shadow-md" alt="" />
-                        ) : (
-                          <div className="w-10 h-10 bg-slate-700 rounded flex items-center justify-center"><Music size={16} /></div>
-                        )}
-                        <div>
-                          <div className="font-medium text-slate-200 group-hover:text-white truncate max-w-[200px]">{pl.name}</div>
-                          <div className="text-xs text-slate-500">{pl.tracks.total} tracks</div>
-                        </div>
-                        <ChevronRight className="ml-auto text-slate-600 group-hover:text-indigo-400" size={16} />
-                      </button>
-                    ))
-                  )}
+                  <div className="max-h-64 overflow-y-auto space-y-1 p-2 scrollbar-thin scrollbar-thumb-slate-700">
+                    {loadingPlaylists ? (
+                      <div className="flex justify-center py-8"><Loader2 className="animate-spin text-indigo-500" /></div>
+                    ) : (
+                      userPlaylists.map(pl => (
+                        <button
+                          key={pl.id}
+                          onClick={() => handlePlaylistSelect(pl.id)}
+                          className="w-full text-left p-2 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center gap-3 group"
+                        >
+                          {pl.images?.[0]?.url ? (
+                            <img src={pl.images[0].url} className="w-10 h-10 rounded shadow-md object-cover" alt="" />
+                          ) : (
+                            <div className="w-10 h-10 bg-slate-700 rounded flex items-center justify-center"><Music size={16} /></div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-slate-200 group-hover:text-white truncate">{pl.name}</div>
+                            <div className="text-xs text-slate-500">{pl.tracks.total} tracks</div>
+                          </div>
+                          <ChevronRight className="ml-auto text-slate-600 group-hover:text-indigo-400" size={16} />
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
 
