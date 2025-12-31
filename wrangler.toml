@@ -3,3 +3,7 @@ main = "workers/api.ts"
 compatibility_date = "2025-02-03"
 assets = { directory = "./dist" }
 
+
+[[kv_namespaces]]
+binding = "PLAYLIST_STORAGE"
+id = "062d03d4fe9b4a2ca43c8882652a0342"

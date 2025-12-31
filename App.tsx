@@ -1,19 +1,19 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PlaylistManifest, AppState } from './types';
-import { parsePlaylistData, verifyAppleMusicMatch } from './services/playlistService';
-import { 
-  Music, 
-  ArrowRight, 
-  Trash2, 
-  CheckCircle2, 
-  Loader2, 
+import { parsePlaylistData, getUserPlaylists, fetchSpotifyPlaylist } from './services/playlistService';
+import { authorizeUser, isAuthorized, searchAndMatchTrack, createPlaylist, initializeMusicKit } from './services/musicKitService';
+import {
+  Music,
+  ArrowRight,
+  Trash2,
+  CheckCircle2,
+  Loader2,
   AlertCircle,
   ChevronRight,
   Music2,
-  QrCode,
-  ExternalLink,
-  Copy
+  ListMusic,
+  LogOut
 } from 'lucide-react';
 
 export default function App() {
@@ -21,6 +21,67 @@ export default function App() {
   const [manifest, setManifest] = useState<PlaylistManifest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
+  const [isAppleAuthorized, setIsAppleAuthorized] = useState(false);
+  const [transferProgress, setTransferProgress] = useState(0);
+
+  // Spotify State
+  const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
+  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+
+  useEffect(() => {
+    // Initialize MusicKit
+    initializeMusicKit().then(() => {
+      setIsAppleAuthorized(isAuthorized());
+    }).catch(console.error);
+
+    // Check for Spotify Token
+    const hash = window.location.hash;
+    if (hash.includes('spotify_token')) {
+      const token = new URLSearchParams(hash.substring(1)).get('spotify_token');
+      if (token) {
+        setSpotifyToken(token);
+        window.location.hash = '';
+        fetchUserPlaylists(token);
+      }
+    }
+
+    // Check for shared playlist
+    const params = new URLSearchParams(window.location.search);
+    const importId = params.get('import');
+    if (importId) {
+      // ... (existing import logic if needed, or handle differently)
+    }
+  }, []);
+
+  const fetchUserPlaylists = async (token: string) => {
+    setLoadingPlaylists(true);
+    try {
+      const playlists = await getUserPlaylists(token);
+      setUserPlaylists(playlists);
+    } catch (e) {
+      setError("Failed to load your Spotify playlists.");
+    } finally {
+      setLoadingPlaylists(false);
+    }
+  };
+
+  const handleSpotifyLogin = () => {
+    window.location.href = '/api/spotify/login';
+  };
+
+  const handlePlaylistSelect = async (playlistId: string) => {
+    setAppState(AppState.PROCESSING);
+    setError(null);
+    try {
+      const data = await fetchSpotifyPlaylist(playlistId, spotifyToken || undefined);
+      setManifest(data);
+      setAppState(AppState.PREVIEW);
+    } catch (err) {
+      setError("Failed to load playlist tracks.");
+      setAppState(AppState.IDLE);
+    }
+  };
 
   const handleTextSubmit = async () => {
     if (!pastedText.trim()) return;
@@ -37,32 +98,54 @@ export default function App() {
     }
   };
 
+  const handleAuthorize = async () => {
+    try {
+      await authorizeUser();
+      setIsAppleAuthorized(true);
+    } catch (e) {
+      setError("Failed to authorize with Apple Music.");
+    }
+  };
+
   const startMigration = async () => {
     if (!manifest) return;
     setAppState(AppState.SYNCING);
-    
+    setTransferProgress(0);
+
     const updatedTracks = [...manifest.tracks];
-    
+    const trackIds: string[] = [];
+
     for (let i = 0; i < updatedTracks.length; i++) {
-      updatedTracks[i] = { ...updatedTracks[i], status: 'matching' };
+      const track = updatedTracks[i];
+      updatedTracks[i] = { ...track, status: 'matching' };
       setManifest(prev => prev ? { ...prev, tracks: [...updatedTracks] } : null);
-      
-      try {
-        const verification = await verifyAppleMusicMatch(updatedTracks[i]);
-        updatedTracks[i] = { 
-          ...updatedTracks[i], 
-          status: verification.matchFound ? 'matched' : 'failed',
-          confidence: verification.confidence
-        };
-      } catch (e) {
-        updatedTracks[i] = { ...updatedTracks[i], status: 'failed' };
+
+      const matchedId = await searchAndMatchTrack(track);
+
+      if (matchedId) {
+        trackIds.push(matchedId);
+        updatedTracks[i] = { ...track, status: 'matched', confidence: 1.0 };
+      } else {
+        updatedTracks[i] = { ...track, status: 'failed' };
       }
-      
+
       setManifest(prev => prev ? { ...prev, tracks: [...updatedTracks] } : null);
-      await new Promise(r => setTimeout(r, 150));
+      setTransferProgress(Math.round(((i + 1) / updatedTracks.length) * 100));
+      await new Promise(r => setTimeout(r, 50));
     }
-    
-    setAppState(AppState.COMPLETED);
+
+    if (trackIds.length > 0) {
+      try {
+        await createPlaylist(manifest.name, "Migrated via SoundBridge", trackIds);
+        setAppState(AppState.COMPLETED);
+      } catch (e) {
+        setError("Failed to create playlist in Apple Music Library.");
+        setAppState(AppState.PREVIEW);
+      }
+    } else {
+      setError("No tracks matched, cannot create empty playlist.");
+      setAppState(AppState.PREVIEW);
+    }
   };
 
   const reset = () => {
@@ -70,17 +153,8 @@ export default function App() {
     setManifest(null);
     setPastedText('');
     setError(null);
+    setTransferProgress(0);
   };
-
-  // Generate a simulated Apple Music import URL
-  const getAppleMusicLink = () => {
-    if (!manifest) return '';
-    const matchedTracks = manifest.tracks.filter(t => t.status === 'matched');
-    const query = matchedTracks.map(t => `${t.title} ${t.artist}`).join(',');
-    return `https://music.apple.com/library/playlist/new?name=${encodeURIComponent(manifest.name)}&items=${encodeURIComponent(query)}`;
-  };
-
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getAppleMusicLink())}&bgcolor=1e293b&color=ffffff&margin=10`;
 
   return (
     <div className="min-h-screen flex flex-col items-center p-4 md:p-8">
@@ -93,15 +167,13 @@ export default function App() {
           <h1 className="text-2xl font-bold tracking-tight">SoundBridge</h1>
         </div>
         <div className="hidden sm:flex gap-4 items-center bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
-          <div className="flex -space-x-2">
-            <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center ring-2 ring-slate-900 border border-green-400">
-               <span className="text-[8px] font-bold">SP</span>
+          {isAppleAuthorized ? (
+            <div className="flex items-center gap-2 text-green-400 text-xs font-bold">
+              <CheckCircle2 size={12} /> Connected to Apple Music
             </div>
-            <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center ring-2 ring-slate-900 border border-red-400">
-               <span className="text-[8px] font-bold">AM</span>
-            </div>
-          </div>
-          <span className="text-xs font-medium text-slate-300">Spotify → Apple Music</span>
+          ) : (
+            <span className="text-xs font-medium text-slate-300">Not connected to Apple Music</span>
+          )}
         </div>
       </header>
 
@@ -110,13 +182,13 @@ export default function App() {
         {appState === AppState.IDLE && (
           <div className="text-center space-y-4 mb-8">
             <h2 className="text-4xl md:text-5xl font-extrabold text-white">
-              Transfer your music <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-red-500">
-                track by track
+              Bridge your playlists <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-indigo-500">
+                directly to Apple Music
               </span>
             </h2>
             <p className="text-slate-400 text-lg max-w-xl mx-auto">
-              Paste a track list like "Song - Artist" or a Spotify playlist link and we'll build an Apple Music import link.
+              Select a Spotify playlist or paste a link, and we'll recreate it in your Apple Music Library instantly.
             </p>
           </div>
         )}
@@ -124,11 +196,67 @@ export default function App() {
         {/* Action Panel */}
         <div className="glass-morphism rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
           {appState === AppState.IDLE && (
-            <div className="space-y-6">
+            <div className="space-y-8">
+
+              {/* Spotify Login / Playlist Picker */}
+              {!spotifyToken ? (
+                <div className="text-center bg-slate-800/30 p-8 rounded-2xl border border-dashed border-slate-700">
+                  <h3 className="text-xl font-bold text-white mb-2">Transfer from your account</h3>
+                  <p className="text-slate-400 mb-6">Connect Spotify to choose from your library.</p>
+                  <button
+                    onClick={handleSpotifyLogin}
+                    className="px-8 py-3 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-full transition-all flex items-center gap-2 mx-auto"
+                  >
+                    Connect Spotify
+                  </button>
+                </div>
+              ) : (
+                <div className="max-h-64 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-slate-700">
+                  <div className="flex justify-between items-center mb-4 sticky top-0 bg-[#0f172a] p-2 z-10 border-b border-slate-800">
+                    <h3 className="font-bold text-white">Your Playlists</h3>
+                    <button onClick={() => { setSpotifyToken(null); setUserPlaylists([]); }} className="text-xs text-red-400 flex items-center gap-1 hover:underline">
+                      <LogOut size={12} /> Disconnect
+                    </button>
+                  </div>
+
+                  {loadingPlaylists ? (
+                    <div className="flex justify-center py-8"><Loader2 className="animate-spin text-indigo-500" /></div>
+                  ) : (
+                    userPlaylists.map(pl => (
+                      <button
+                        key={pl.id}
+                        onClick={() => handlePlaylistSelect(pl.id)}
+                        className="w-full text-left p-3 hover:bg-slate-700/50 rounded-xl transition-colors flex items-center gap-3 group"
+                      >
+                        {pl.images?.[0]?.url ? (
+                          <img src={pl.images[0].url} className="w-10 h-10 rounded shadow-md" alt="" />
+                        ) : (
+                          <div className="w-10 h-10 bg-slate-700 rounded flex items-center justify-center"><Music size={16} /></div>
+                        )}
+                        <div>
+                          <div className="font-medium text-slate-200 group-hover:text-white truncate max-w-[200px]">{pl.name}</div>
+                          <div className="text-xs text-slate-500">{pl.tracks.total} tracks</div>
+                        </div>
+                        <ChevronRight className="ml-auto text-slate-600 group-hover:text-indigo-400" size={16} />
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-slate-700" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-[#0f172a] px-2 text-slate-500">Or paste raw text</span>
+                </div>
+              </div>
+
               <div className="relative group">
                 <textarea
-                  className="w-full h-48 bg-slate-800/50 border border-slate-700 rounded-2xl p-6 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-lg leading-relaxed"
-                  placeholder="Paste a Spotify playlist link or a track list (Song - Artist, Artist - Song, or Song by Artist)..."
+                  className="w-full h-24 bg-slate-800/50 border border-slate-700 rounded-2xl p-4 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-base"
+                  placeholder="Paste a Spotify link or 'Song - Artist' list..."
                   value={pastedText}
                   onChange={(e) => setPastedText(e.target.value)}
                 />
@@ -137,9 +265,9 @@ export default function App() {
               <button
                 onClick={handleTextSubmit}
                 disabled={!pastedText.trim()}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 group"
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 group"
               >
-                Parse Playlist
+                Parse Manual Input
                 <ChevronRight className="group-hover:translate-x-1 transition-transform" />
               </button>
 
@@ -159,9 +287,9 @@ export default function App() {
                 <Music className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-300 w-8 h-8" />
               </div>
               <div className="text-center">
-                <h3 className="text-2xl font-bold mb-2">Parsing your tracks...</h3>
+                <h3 className="text-2xl font-bold mb-2">Analyzing Playlist...</h3>
                 <p className="text-slate-400 max-w-xs mx-auto">
-                  Extracting song and artist pairs to build your migration manifest.
+                  Preparing your tracks for migration.
                 </p>
               </div>
             </div>
@@ -172,8 +300,8 @@ export default function App() {
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-slate-700 pb-6 gap-4">
                 <div>
                   <div className="flex items-center gap-3 mb-1">
-                     <div className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-[10px] font-bold tracking-wider">MANIFEST</div>
-                     <h3 className="text-2xl font-bold text-white">{manifest.name}</h3>
+                    <div className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded text-[10px] font-bold tracking-wider">MANIFEST</div>
+                    <h3 className="text-2xl font-bold text-white">{manifest.name}</h3>
                   </div>
                   <p className="text-slate-400">{manifest.tracks.length} tracks identified</p>
                 </div>
@@ -182,17 +310,27 @@ export default function App() {
                     <button onClick={reset} className="p-3 hover:bg-slate-700 rounded-xl transition-colors text-slate-400 border border-slate-700">
                       <Trash2 size={20} />
                     </button>
-                    <button 
-                      onClick={startMigration}
-                      className="flex-1 sm:flex-none px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30"
-                    >
-                      Estimate Apple Music Matches
-                      <ArrowRight size={18} />
-                    </button>
+                    {!isAppleAuthorized ? (
+                      <button
+                        onClick={handleAuthorize}
+                        className="flex-1 sm:flex-none px-8 py-3 bg-red-500 hover:bg-red-400 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-red-600/30"
+                      >
+                        <Music size={18} />
+                        Login to Apple Music
+                      </button>
+                    ) : (
+                      <button
+                        onClick={startMigration}
+                        className="flex-1 sm:flex-none px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30"
+                      >
+                        Transfer to Library
+                        <ArrowRight size={18} />
+                      </button>
+                    )}
                   </div>
                 )}
                 {appState === AppState.COMPLETED && (
-                  <button 
+                  <button
                     onClick={reset}
                     className="w-full sm:w-auto px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold border border-slate-600"
                   >
@@ -203,27 +341,24 @@ export default function App() {
 
               <div className="max-h-[400px] overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                 {manifest.tracks.map((track, i) => (
-                  <div 
-                    key={track.id} 
+                  <div
+                    key={track.id}
                     className="flex items-center justify-between p-4 bg-slate-800/40 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-colors"
                   >
                     <div className="flex items-center gap-4">
                       <span className="text-slate-500 font-mono text-sm w-4">{i + 1}</span>
                       <div>
                         <p className="font-semibold text-white leading-tight">{track.title}</p>
-                        <p className="text-sm text-slate-400">{track.artist} {track.album ? `• ${track.album}` : ''}</p>
+                        <p className="text-sm text-slate-400">{track.artist} {track.album ? `• ${track.album} ` : ''}</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-3">
                       {track.status === 'pending' && <div className="w-2 h-2 rounded-full bg-slate-600" />}
                       {track.status === 'matching' && <Loader2 className="animate-spin text-indigo-500" size={18} />}
                       {track.status === 'matched' && (
                         <div className="flex flex-col items-end">
                           <CheckCircle2 className="text-green-500" size={18} />
-                          {track.confidence && (
-                            <span className="text-[10px] text-green-500/70">{(track.confidence * 100).toFixed(0)}% match</span>
-                          )}
                         </div>
                       )}
                       {track.status === 'failed' && (
@@ -243,54 +378,33 @@ export default function App() {
                     <Loader2 className="animate-spin text-indigo-500" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-indigo-400">Estimating matches</p>
-                    <p className="text-xs text-slate-400">Scoring your track list to build the import link.</p>
+                    <p className="text-sm font-bold text-indigo-400">Migrating Tracks...</p>
+                    <p className="text-xs text-slate-400">Searching catalog and adding to your library.</p>
                   </div>
                   <div className="text-lg font-mono font-bold text-indigo-400">
-                    {Math.round((manifest.tracks.filter(t => t.status === 'matched' || t.status === 'failed').length / manifest.tracks.length) * 100)}%
+                    {transferProgress}%
                   </div>
                 </div>
               )}
 
               {appState === AppState.COMPLETED && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-900/60 p-8 rounded-3xl border border-slate-700/50">
-                  <div className="flex flex-col justify-center space-y-4">
-                    <div className="w-12 h-12 bg-green-500/20 rounded-2xl flex items-center justify-center">
-                      <CheckCircle2 className="text-green-500" size={32} />
-                    </div>
-                    <h4 className="text-2xl font-bold text-white">Import Ready!</h4>
-                    <p className="text-slate-400 text-sm leading-relaxed">
-                      We flagged {manifest.tracks.filter(t => t.status === 'matched').length} tracks as likely matches.
-                      Scan the QR code with your phone to open Apple Music and finalize the import.
-                    </p>
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      <a 
-                        href={getAppleMusicLink()} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-red-600/20"
-                      >
-                        <ExternalLink size={14} /> Open Link
-                      </a>
-                      <button 
-                        onClick={() => navigator.clipboard.writeText(getAppleMusicLink())}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-bold transition-all"
-                      >
-                        <Copy size={14} /> Copy URL
-                      </button>
-                    </div>
+                <div className="flex flex-col items-center justify-center p-8 bg-green-500/10 border border-green-500/20 rounded-3xl space-y-4">
+                  <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                    <CheckCircle2 className="text-white w-8 h-8" />
                   </div>
-                  
-                  <div className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl shadow-inner">
-                    <img 
-                      src={qrCodeUrl} 
-                      alt="Import QR Code" 
-                      className="w-48 h-48 mb-3"
-                    />
-                    <div className="flex items-center gap-2 text-slate-800 font-bold text-xs uppercase tracking-widest">
-                      <QrCode size={14} /> Scan to Import
-                    </div>
-                  </div>
+                  <h2 className="text-3xl font-bold text-white">Migration Complete!</h2>
+                  <p className="text-slate-300 text-center max-w-md">
+                    The playlist <strong>{manifest.name}</strong> has been created in your Apple Music Library.
+                  </p>
+                  <a
+                    href="https://music.apple.com/library/playlists"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-6 py-3 bg-white text-slate-900 rounded-xl font-bold hover:bg-slate-200 transition-colors flex items-center gap-2"
+                  >
+                    <ListMusic size={18} />
+                    Open Apple Music
+                  </a>
                 </div>
               )}
             </div>
@@ -300,20 +414,20 @@ export default function App() {
         {/* Features / Benefits */}
         {appState === AppState.IDLE && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
-            <FeatureCard 
+            <FeatureCard
               icon={<Music className="text-indigo-400" />}
-              title="Playlist Parsing"
-              description="Paste a Spotify playlist link or songs as 'Title - Artist', 'Artist - Title', or 'Title by Artist'."
+              title="Smart Search"
+              description="We search the Apple Music catalog for the best match for every track."
             />
-            <FeatureCard 
-              icon={<QrCode className="text-green-400" />}
-              title="QR Magic Import"
-              description="Generate a scan-and-go code to open Apple Music on your phone."
+            <FeatureCard
+              icon={<CheckCircle2 className="text-green-400" />}
+              title="Direct Integration"
+              description="Tracks are added directly to your iCloud Music Library instantly."
             />
-            <FeatureCard 
-              icon={<CheckCircle2 className="text-amber-400" />}
-              title="Heuristic Matching"
-              description="Scores likely matches without relying on cloud services."
+            <FeatureCard
+              icon={<ListMusic className="text-amber-400" />}
+              title="Full Playlists"
+              description="Migrate entire playlists without size limits."
             />
           </div>
         )}

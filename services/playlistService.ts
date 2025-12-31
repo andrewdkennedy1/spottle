@@ -161,15 +161,39 @@ async function getSpotifyAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-async function fetchSpotifyPlaylist(
-  playlistId: string
-): Promise<{ name: string; tracks: Track[] }> {
-  const token = await getSpotifyAccessToken();
+// Helper to extract ID from URL or return the ID itself
+function getSpotifyId(input: string): string {
+  const match = input.match(/playlist\/([a-zA-Z0-9]+)/);
+  return match ? match[1] : input;
+}
+
+export async function getUserPlaylists(accessToken: string): Promise<{ id: string; name: string; tracks: { total: number }; images: { url: string }[] }[]> {
+  try {
+    const response = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user playlists: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.items;
+  } catch (e) {
+    console.error("Error fetching user playlists:", e);
+    throw e;
+  }
+}
+
+export async function fetchSpotifyPlaylist(input: string, userToken?: string): Promise<{ name: string; tracks: Track[] }> {
+  const playlistId = getSpotifyId(input);
+  const token = userToken || await getSpotifyAccessToken();
   const headers = {
     Authorization: `Bearer ${token}`
   };
 
-  const playlistUrl = new URL(`https://api.spotify.com/v1/playlists/${playlistId}`);
   playlistUrl.searchParams.set("market", "US");
   playlistUrl.searchParams.set(
     "fields",
@@ -483,4 +507,26 @@ export async function verifyAppleMusicMatch(
 
   confidence = Math.min(0.95, Math.max(0.35, confidence));
   return { confidence, matchFound: confidence >= 0.5 };
+}
+
+export async function sharePlaylist(manifest: { name: string; tracks: Track[] }): Promise<string> {
+  try {
+    const res = await fetch("/api/share", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(manifest)
+    });
+    if (!res.ok) throw new Error("Failed to share playlist");
+    const data = await res.json() as { id: string };
+    return data.id;
+  } catch (e) {
+    console.error("Share error:", e);
+    throw e;
+  }
+}
+
+export async function getSharedPlaylist(id: string): Promise<{ name: string; tracks: Track[] }> {
+  const res = await fetch(`/api/playlist/${id}`);
+  if (!res.ok) throw new Error("Playlist not found");
+  return res.json();
 }
