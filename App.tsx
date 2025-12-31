@@ -1,21 +1,16 @@
 
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Track, PlaylistManifest, AppState } from './types';
-import { parsePlaylistData, verifyAppleMusicMatch } from './services/geminiService';
+import React, { useState } from 'react';
+import { PlaylistManifest, AppState } from './types';
+import { parsePlaylistData, verifyAppleMusicMatch } from './services/playlistService';
 import { 
   Music, 
   ArrowRight, 
-  Plus, 
   Trash2, 
   CheckCircle2, 
   Loader2, 
-  Upload, 
-  Camera,
   AlertCircle,
-  Smartphone,
   ChevronRight,
   Music2,
-  Link,
   QrCode,
   ExternalLink,
   Copy
@@ -26,13 +21,6 @@ export default function App() {
   const [manifest, setManifest] = useState<PlaylistManifest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
-  const [isUrlDetected, setIsUrlDetected] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const urlPattern = /(https?:\/\/[^\s]+)/g;
-    setIsUrlDetected(urlPattern.test(pastedText));
-  }, [pastedText]);
 
   const handleTextSubmit = async () => {
     if (!pastedText.trim()) return;
@@ -43,28 +31,8 @@ export default function App() {
       setManifest(data);
       setAppState(AppState.PREVIEW);
     } catch (err) {
-      setError("Failed to process playlist data. If using a link, ensure it is public.");
-      setAppState(AppState.IDLE);
-    }
-  };
-
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setAppState(AppState.PROCESSING);
-    setError(null);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64Data = (e.target?.result as string).split(',')[1];
-        const data = await parsePlaylistData({ data: base64Data, mimeType: file.type });
-        setManifest(data);
-        setAppState(AppState.PREVIEW);
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      setError("Failed to read image. Please try again.");
+      const message = err instanceof Error ? err.message : "Failed to parse the track list.";
+      setError(message);
       setAppState(AppState.IDLE);
     }
   };
@@ -122,7 +90,7 @@ export default function App() {
           <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
             <Music2 className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">SoundBridge <span className="text-indigo-500">AI</span></h1>
+          <h1 className="text-2xl font-bold tracking-tight">SoundBridge</h1>
         </div>
         <div className="hidden sm:flex gap-4 items-center bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
           <div className="flex -space-x-2">
@@ -144,11 +112,11 @@ export default function App() {
             <h2 className="text-4xl md:text-5xl font-extrabold text-white">
               Transfer your music <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-red-500">
-                seamlessly with AI
+                track by track
               </span>
             </h2>
             <p className="text-slate-400 text-lg max-w-xl mx-auto">
-              Paste a Spotify playlist link, raw song lists, or even upload a screenshot. Gemini will find the matches on Apple Music.
+              Paste a track list like "Song - Artist" or "Artist - Song" and we'll build an Apple Music import link.
             </p>
           </div>
         )}
@@ -160,35 +128,10 @@ export default function App() {
               <div className="relative group">
                 <textarea
                   className="w-full h-48 bg-slate-800/50 border border-slate-700 rounded-2xl p-6 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all resize-none text-lg leading-relaxed"
-                  placeholder="Paste a Spotify Playlist Link or song list here..."
+                  placeholder="Paste a track list (Song - Artist, Artist - Song, or Song by Artist)..."
                   value={pastedText}
                   onChange={(e) => setPastedText(e.target.value)}
                 />
-                
-                <div className="absolute top-4 right-4 flex gap-2">
-                  {isUrlDetected && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/20 text-green-400 rounded-lg text-xs font-bold border border-green-500/30 animate-pulse">
-                      <Link size={14} /> Link Detected
-                    </div>
-                  )}
-                </div>
-
-                <div className="absolute bottom-4 right-4 flex gap-2">
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium transition-colors border border-slate-600"
-                  >
-                    <Camera size={16} />
-                    Screenshot
-                  </button>
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                  />
-                </div>
               </div>
 
               <button
@@ -196,7 +139,7 @@ export default function App() {
                 disabled={!pastedText.trim()}
                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-500/20 group"
               >
-                {isUrlDetected ? 'Fetch Playlist Content' : 'Analyze Track List'}
+                Parse Track List
                 <ChevronRight className="group-hover:translate-x-1 transition-transform" />
               </button>
 
@@ -216,12 +159,9 @@ export default function App() {
                 <Music className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-300 w-8 h-8" />
               </div>
               <div className="text-center">
-                <h3 className="text-2xl font-bold mb-2">Gemini is Reading...</h3>
+                <h3 className="text-2xl font-bold mb-2">Parsing your tracks...</h3>
                 <p className="text-slate-400 max-w-xs mx-auto">
-                  {isUrlDetected 
-                    ? "Browsing the Spotify link to extract track metadata and album art information." 
-                    : "Processing your input to create a structured migration manifest."
-                  }
+                  Extracting song and artist pairs to build your migration manifest.
                 </p>
               </div>
             </div>
@@ -246,7 +186,7 @@ export default function App() {
                       onClick={startMigration}
                       className="flex-1 sm:flex-none px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30"
                     >
-                      Start Apple Music Match
+                      Estimate Apple Music Matches
                       <ArrowRight size={18} />
                     </button>
                   </div>
@@ -303,8 +243,8 @@ export default function App() {
                     <Loader2 className="animate-spin text-indigo-500" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-indigo-400">Verifying on Apple Music</p>
-                    <p className="text-xs text-slate-400">Comparing metadata to ensure high-fidelity matching.</p>
+                    <p className="text-sm font-bold text-indigo-400">Estimating matches</p>
+                    <p className="text-xs text-slate-400">Scoring your track list to build the import link.</p>
                   </div>
                   <div className="text-lg font-mono font-bold text-indigo-400">
                     {Math.round((manifest.tracks.filter(t => t.status === 'matched' || t.status === 'failed').length / manifest.tracks.length) * 100)}%
@@ -320,7 +260,7 @@ export default function App() {
                     </div>
                     <h4 className="text-2xl font-bold text-white">Import Ready!</h4>
                     <p className="text-slate-400 text-sm leading-relaxed">
-                      We found {manifest.tracks.filter(t => t.status === 'matched').length} of your tracks. 
+                      We flagged {manifest.tracks.filter(t => t.status === 'matched').length} tracks as likely matches.
                       Scan the QR code with your phone to open Apple Music and finalize the import.
                     </p>
                     <div className="flex flex-wrap gap-2 pt-2">
@@ -361,26 +301,26 @@ export default function App() {
         {appState === AppState.IDLE && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
             <FeatureCard 
-              icon={<Link className="text-indigo-400" />}
-              title="Spotify Link Support"
-              description="Simply paste a public Spotify URL and let Gemini crawl the metadata for you."
+              icon={<Music className="text-indigo-400" />}
+              title="Track List Parsing"
+              description="Paste songs as 'Title - Artist', 'Artist - Title', or 'Title by Artist'."
             />
             <FeatureCard 
               icon={<QrCode className="text-green-400" />}
               title="QR Magic Import"
-              description="Generate a scan-and-go code to move your library to your mobile device instantly."
+              description="Generate a scan-and-go code to open Apple Music on your phone."
             />
             <FeatureCard 
-              icon={<Camera className="text-purple-400" />}
-              title="Visual OCR"
-              description="Snapshot any playlist on any device. Gemini handles the complex text recognition."
+              icon={<CheckCircle2 className="text-amber-400" />}
+              title="Heuristic Matching"
+              description="Scores likely matches without relying on cloud services."
             />
           </div>
         )}
       </main>
 
       <footer className="mt-auto py-8 text-slate-500 text-xs flex flex-col items-center gap-2">
-        <p>&copy; 2024 SoundBridge AI. Powered by Google Gemini 3 Pro.</p>
+        <p>&copy; 2024 SoundBridge. Built for fast playlist transfers.</p>
         <div className="flex gap-4">
           <span className="hover:text-indigo-400 cursor-pointer transition-colors underline decoration-slate-700 underline-offset-4">Terms</span>
           <span className="hover:text-indigo-400 cursor-pointer transition-colors underline decoration-slate-700 underline-offset-4">Privacy</span>

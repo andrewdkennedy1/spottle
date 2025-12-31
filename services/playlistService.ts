@@ -1,0 +1,286 @@
+import { Track } from "../types";
+
+type ParseInput = string | { data: string; mimeType: string };
+
+type ParsedTrack = {
+  title: string;
+  artist: string;
+  album: string;
+};
+
+const TITLE_HINTS = [
+  "remix",
+  "mix",
+  "edit",
+  "version",
+  "live",
+  "demo",
+  "acoustic",
+  "instrumental",
+  "remaster",
+  "remastered",
+  "radio",
+  "extended",
+  "feat",
+  "ft",
+  "featuring"
+];
+
+function isStandaloneUrl(value: string): boolean {
+  return /^https?:\/\/\S+$/i.test(value.trim());
+}
+
+function stripLinePrefix(line: string): string {
+  let cleaned = line.trim();
+  cleaned = cleaned.replace(/^\s*\d+\s*[\.\)\-:]\s*/, "");
+  cleaned = cleaned.replace(/^\s*[\u2022\-\*\+]+\s*/, "");
+  return cleaned.trim();
+}
+
+function cleanField(value: string): string {
+  return value
+    .replace(/^[\"'`]+/, "")
+    .replace(/[\"'`]+$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function scoreTitle(value: string): number {
+  const lower = value.toLowerCase();
+  let score = 0;
+  for (const hint of TITLE_HINTS) {
+    if (lower.includes(hint)) {
+      score += 2;
+    }
+  }
+  if (/[([{\]]/.test(value)) {
+    score += 1;
+  }
+  if (/\d{4}/.test(value)) {
+    score += 1;
+  }
+  return score;
+}
+
+function scoreArtist(value: string): number {
+  const lower = value.toLowerCase();
+  let score = 0;
+  if (value.includes("&")) {
+    score += 1;
+  }
+  if (lower.includes(" x ")) {
+    score += 1;
+  }
+  if (lower.includes(" vs ")) {
+    score += 1;
+  }
+  if (lower.includes(" and ")) {
+    score += 1;
+  }
+  if (lower.includes(" with ")) {
+    score += 1;
+  }
+  return score;
+}
+
+function resolveTitleArtist(left: string, right: string): { title: string; artist: string } {
+  const leftTitleScore = scoreTitle(left);
+  const rightTitleScore = scoreTitle(right);
+  const leftArtistScore = scoreArtist(left);
+  const rightArtistScore = scoreArtist(right);
+
+  if (leftTitleScore > rightTitleScore && rightArtistScore >= leftArtistScore) {
+    return { title: left, artist: right };
+  }
+  if (rightTitleScore > leftTitleScore && leftArtistScore >= rightArtistScore) {
+    return { title: right, artist: left };
+  }
+  if (rightArtistScore > leftArtistScore) {
+    return { title: left, artist: right };
+  }
+  if (leftArtistScore > rightArtistScore) {
+    return { title: right, artist: left };
+  }
+  return { title: left, artist: right };
+}
+
+function splitParts(value: string, delimiter: RegExp): string[] {
+  return value
+    .split(delimiter)
+    .map(cleanField)
+    .filter(Boolean);
+}
+
+function buildFromParts(parts: string[]): ParsedTrack | null {
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const [first, second, ...rest] = parts;
+  const { title, artist } = resolveTitleArtist(first, second);
+  const album = rest.length ? cleanField(rest.join(" - ")) : "";
+
+  if (!title || !artist) {
+    return null;
+  }
+
+  return { title, artist, album };
+}
+
+function parseTrackLine(line: string): ParsedTrack | null {
+  const cleaned = stripLinePrefix(line);
+  if (!cleaned) {
+    return null;
+  }
+
+  const byMatch = cleaned.match(/^(.*?)\s+by\s+(.+)$/i);
+  if (byMatch) {
+    const title = cleanField(byMatch[1]);
+    const artist = cleanField(byMatch[2]);
+    if (!title || !artist) {
+      return null;
+    }
+    return { title, artist, album: "" };
+  }
+
+  if (cleaned.includes("\t")) {
+    const parts = splitParts(cleaned, /\t+/);
+    return buildFromParts(parts);
+  }
+
+  const dashParts = splitParts(cleaned, /\s[-\u2013\u2014]\s/);
+  if (dashParts.length >= 2) {
+    return buildFromParts(dashParts);
+  }
+
+  const pipeParts = splitParts(cleaned, /\s*\|\s*/);
+  if (pipeParts.length >= 2) {
+    return buildFromParts(pipeParts);
+  }
+
+  const commaParts = splitParts(cleaned, /\s*,\s*/);
+  if (commaParts.length === 2) {
+    return buildFromParts(commaParts);
+  }
+
+  return null;
+}
+
+function splitCandidateLines(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  let lines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 1) {
+    const single = lines[0];
+    const semicolonSplit = single.split(/\s*;\s*/).map((line) => line.trim()).filter(Boolean);
+    if (semicolonSplit.length > 1) {
+      lines = semicolonSplit;
+    } else {
+      const bulletSplit = single
+        .split(/\s*\u2022\s*/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (bulletSplit.length > 1) {
+        lines = bulletSplit;
+      }
+    }
+  }
+
+  return lines;
+}
+
+function derivePlaylistName(lines: string[], parsedTracks: Array<ParsedTrack | null>): { name: string; startIndex: number } {
+  let name = "My Migrated Playlist";
+  let startIndex = 0;
+
+  if (!lines.length) {
+    return { name, startIndex };
+  }
+
+  const headerMatch = lines[0].match(/^playlist\s*[:\-]\s*(.+)$/i);
+  if (headerMatch) {
+    name = cleanField(headerMatch[1]) || name;
+    startIndex = 1;
+    return { name, startIndex };
+  }
+
+  if (!parsedTracks[0] && parsedTracks.slice(1).some((track) => track)) {
+    name = cleanField(lines[0]) || name;
+    startIndex = 1;
+  }
+
+  return { name, startIndex };
+}
+
+export async function parsePlaylistData(input: ParseInput): Promise<{ name: string; tracks: Track[] }> {
+  if (typeof input !== "string") {
+    throw new Error("Image parsing is not supported. Paste a text track list instead.");
+  }
+
+  const text = input.trim();
+  if (!text) {
+    throw new Error("Paste a track list to continue.");
+  }
+
+  if (isStandaloneUrl(text)) {
+    throw new Error("Playlist links are not supported. Paste the track list instead.");
+  }
+
+  const lines = splitCandidateLines(text);
+  if (!lines.length) {
+    throw new Error("No tracks found. Try one track per line.");
+  }
+
+  const parsedTracks = lines.map(parseTrackLine);
+  const { name, startIndex } = derivePlaylistName(lines, parsedTracks);
+  const trackList = parsedTracks
+    .slice(startIndex)
+    .filter((track): track is ParsedTrack => Boolean(track));
+
+  if (!trackList.length) {
+    throw new Error("No tracks found. Use formats like 'Song - Artist' or 'Artist - Song'.");
+  }
+
+  return {
+    name,
+    tracks: trackList.map((track, index) => ({
+      ...track,
+      id: `track-${index}`,
+      status: "pending"
+    }))
+  };
+}
+
+export async function verifyAppleMusicMatch(
+  track: Track
+): Promise<{ confidence: number; matchFound: boolean }> {
+  const title = track.title.trim();
+  const artist = track.artist.trim();
+  const album = track.album.trim();
+
+  if (!title || !artist) {
+    return { confidence: 0, matchFound: false };
+  }
+
+  let confidence = 0.65;
+  if (title.length >= 4) {
+    confidence += 0.1;
+  }
+  if (artist.length >= 3) {
+    confidence += 0.1;
+  }
+  if (album) {
+    confidence += 0.05;
+  }
+
+  const lowered = `${title} ${artist} ${album}`.toLowerCase();
+  if (TITLE_HINTS.some((hint) => lowered.includes(hint))) {
+    confidence -= 0.05;
+  }
+
+  confidence = Math.min(0.95, Math.max(0.35, confidence));
+  return { confidence, matchFound: confidence >= 0.5 };
+}
