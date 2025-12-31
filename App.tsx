@@ -136,7 +136,7 @@ export default function App() {
 
     if (trackIds.length > 0) {
       try {
-        await createPlaylist(manifest.name, "Migrated via SoundBridge", trackIds);
+        await createPlaylist(manifest.name, "Migrated via Spottle", trackIds);
         setAppState(AppState.COMPLETED);
       } catch (e) {
         setError("Failed to create playlist in Apple Music Library.");
@@ -164,16 +164,19 @@ export default function App() {
           <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
             <Music2 className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">SoundBridge</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Spottle</h1>
         </div>
-        <div className="hidden sm:flex gap-4 items-center bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
-          {isAppleAuthorized ? (
-            <div className="flex items-center gap-2 text-green-400 text-xs font-bold">
-              <CheckCircle2 size={12} /> Connected to Apple Music
-            </div>
-          ) : (
-            <span className="text-xs font-medium text-slate-300">Not connected to Apple Music</span>
-          )}
+        <div className="hidden sm:flex flex-col items-end gap-1">
+          <div className="flex gap-4 items-center bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
+            {isAppleAuthorized ? (
+              <div className="flex items-center gap-2 text-green-400 text-xs font-bold">
+                <CheckCircle2 size={12} /> Connected to Apple Music
+              </div>
+            ) : (
+              <span className="text-xs font-medium text-slate-300">Not connected to Apple Music</span>
+            )}
+          </div>
+          <span className="text-[10px] text-slate-500 italic pr-2">Built for Melissa (but you can use it too)</span>
         </div>
       </header>
 
@@ -434,7 +437,7 @@ export default function App() {
       </main>
 
       <footer className="mt-auto py-8 text-slate-500 text-xs flex flex-col items-center gap-2">
-        <p>&copy; 2024 SoundBridge. Built for fast playlist transfers.</p>
+        <p>Made with ❤️ for Melissa by her brother. (Currently accepting "Best Brother" awards)</p>
         <div className="flex gap-4">
           <span className="hover:text-indigo-400 cursor-pointer transition-colors underline decoration-slate-700 underline-offset-4">Terms</span>
           <span className="hover:text-indigo-400 cursor-pointer transition-colors underline decoration-slate-700 underline-offset-4">Privacy</span>

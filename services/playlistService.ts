@@ -194,6 +194,7 @@ export async function fetchSpotifyPlaylist(input: string, userToken?: string): P
     Authorization: `Bearer ${token}`
   };
 
+  const playlistUrl = new URL(`https://api.spotify.com/v1/playlists/${playlistId}`);
   playlistUrl.searchParams.set("market", "US");
   playlistUrl.searchParams.set(
     "fields",
@@ -231,10 +232,12 @@ export async function fetchSpotifyPlaylist(input: string, userToken?: string): P
       }
       nextUrl = data.tracks?.next ?? null;
     } else {
-      if (Array.isArray(data.items)) {
-        items.push(...data.items);
+      // It's a page of tracks
+      const page = data as SpotifyTracksPage;
+      if (Array.isArray(page.items)) {
+        items.push(...page.items);
       }
-      nextUrl = data.next ?? null;
+      nextUrl = page.next ?? null;
     }
   }
 
