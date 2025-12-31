@@ -126,10 +126,14 @@ export default function App() {
 
   const handleAuthorize = async () => {
     try {
-      await authorizeUser();
-      setIsAppleAuthorized(true);
+      const success = await authorizeUser();
+      if (success) {
+        setIsAppleAuthorized(true);
+      } else {
+        setError("Failed to authorize with Apple Music. Ensure popups are allowed.");
+      }
     } catch (e) {
-      setError("Failed to authorize with Apple Music.");
+      setError("Failed to connect to Apple Music service.");
     }
   };
 
@@ -211,23 +215,6 @@ export default function App() {
             <Music2 className="text-white" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Spottle</h1>
-        </div>
-        <div className="hidden sm:flex flex-col items-end gap-1">
-          <div className="flex gap-4 items-center bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
-            {isAppleAuthorized ? (
-              <div className="flex items-center gap-2 text-green-400 text-xs font-bold">
-                <CheckCircle2 size={12} /> Connected to Apple Music
-              </div>
-            ) : (
-              <button
-                onClick={handleAuthorize}
-                className="text-xs font-medium text-slate-300 hover:text-white hover:underline transition-colors"
-              >
-                Not connected to Apple Music (Login)
-              </button>
-            )}
-          </div>
-          <span className="text-[10px] text-slate-500 italic pr-2">Built for Melissa (but you can use it too)</span>
         </div>
       </header>
 

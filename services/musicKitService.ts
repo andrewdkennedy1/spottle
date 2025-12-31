@@ -13,6 +13,19 @@ let musicKitInstance: any = null;
 export async function initializeMusicKit(): Promise<any> {
     if (musicKitInstance) return musicKitInstance;
 
+    // Wait for the script to load if it hasn't yet
+    if (!window.MusicKit) {
+        let attempts = 0;
+        while (!window.MusicKit && attempts < 10) {
+            await new Promise(r => setTimeout(r, 500));
+            attempts++;
+        }
+    }
+
+    if (!window.MusicKit) {
+        throw new Error("MusicKit JS not loaded");
+    }
+
     try {
         const response = await fetch("/api/apple-token");
         if (!response.ok) throw new Error("Failed to fetch developer token");
@@ -33,9 +46,15 @@ export async function initializeMusicKit(): Promise<any> {
     }
 }
 
-export async function authorizeUser(): Promise<void> {
+export async function authorizeUser(): Promise<boolean> {
     const mk = await initializeMusicKit();
-    await mk.authorize();
+    try {
+        await mk.authorize();
+        return mk.isAuthorized;
+    } catch (e) {
+        console.error("Auth error", e);
+        return false;
+    }
 }
 
 export function isAuthorized(): boolean {
