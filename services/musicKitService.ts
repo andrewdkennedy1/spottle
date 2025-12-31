@@ -26,40 +26,48 @@ export async function initializeMusicKit(): Promise<any> {
         throw new Error("MusicKit JS not loaded");
     }
 
-    try {
-        const response = await fetch("/api/apple-token");
-        if (!response.ok) throw new Error("Failed to fetch developer token");
-        const { token } = await response.json();
-
-        musicKitInstance = await window.MusicKit.configure({
-            developerToken: token,
-            app: {
-                name: "Spottle",
-                build: "1.0.0"
-            }
-        });
-
-        return musicKitInstance;
-    } catch (error) {
-        console.error("Failed to initialize MusicKit", error);
-        throw error;
+    console.log("Fetching Apple developer token...");
+    const response = await fetch("/api/apple-token");
+    if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`Failed to fetch developer token: ${response.status} ${errBody}`);
     }
+    const { token } = await response.json();
+    console.log("Developer token received. Configuring MusicKit...");
+
+    musicKitInstance = await window.MusicKit.configure({
+        developerToken: token,
+        app: {
+            name: "Spottle",
+            build: "1.0.0"
+        }
+    });
+
+    console.log("MusicKit configured successfully.");
+    return musicKitInstance;
+} catch (error) {
+    console.error("CRITICAL: Failed to initialize MusicKit", error);
+    throw error;
+}
 }
 
 export async function authorizeUser(): Promise<boolean> {
-    const mk = await initializeMusicKit();
     try {
+        const mk = await initializeMusicKit();
+        console.log("Initiating Apple Music authorization...");
         await mk.authorize();
+        console.log("Authorization completed. Status:", mk.isAuthorized);
         return mk.isAuthorized;
     } catch (e) {
-        console.error("Auth error", e);
+        console.error("Apple Music Authorization Error:", e);
         return false;
     }
 }
 
 export function isAuthorized(): boolean {
     if (!window.MusicKit) return false;
-    return window.MusicKit.getInstance()?.isAuthorized ?? false;
+    const instance = window.MusicKit.getInstance();
+    return instance ? instance.isAuthorized : false;
 }
 
 export async function searchAndMatchTrack(track: Track): Promise<string | null> {
@@ -115,7 +123,10 @@ export async function getAppleMusicUserPlaylists(): Promise<{ id: string; name: 
             name: p.attributes.name,
             tracks: { total: p.attributes.trackCount || 0 } // heuristics, might need detailed fetch if trackCount missing
         }));
-    } catch (e) {
+    } catch (e: any) {
+        if (e.status === '403' || e.httpStatusCode === 403) {
+            throw new Error("SUBSCRIPTION_REQUIRED");
+        }
         console.error("Failed to fetch Apple Music playlists", e);
         return [];
     }

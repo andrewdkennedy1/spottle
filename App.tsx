@@ -30,8 +30,13 @@ export default function App() {
 
   // Spotify State
   const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
-  const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
-  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+  const [spotifyPlaylists, setSpotifyPlaylists] = useState<any[]>([]);
+  const [loadingSpotifyPlaylists, setLoadingSpotifyPlaylists] = useState(false);
+
+  // Apple Music State
+  const [applePlaylists, setApplePlaylists] = useState<any[]>([]);
+  const [loadingApplePlaylists, setLoadingApplePlaylists] = useState(false);
+  const [isAppleSubscriptionActive, setIsAppleSubscriptionActive] = useState(true);
 
   useEffect(() => {
     // Initialize MusicKit
@@ -46,7 +51,7 @@ export default function App() {
       if (token) {
         setSpotifyToken(token);
         window.location.hash = '';
-        fetchUserPlaylists(token);
+        fetchSpotifyPlaylists(token);
       }
     }
 
@@ -58,44 +63,59 @@ export default function App() {
     }
   }, []);
 
-  const fetchUserPlaylists = async (token?: string) => {
-    setLoadingPlaylists(true);
+  const fetchSpotifyPlaylists = async (token?: string) => {
+    const t = token || spotifyToken;
+    if (!t) return;
+    setLoadingSpotifyPlaylists(true);
     try {
-      let playlists = [];
-      if (direction === 'spotify-to-apple') {
-        if (token || spotifyToken) {
-          playlists = await getUserPlaylists(token || spotifyToken!);
-        }
-      } else {
-        if (isAppleAuthorized) {
-          const { getAppleMusicUserPlaylists } = await import('./services/musicKitService');
-          // @ts-ignore
-          playlists = await getAppleMusicUserPlaylists();
-        }
-      }
-      setUserPlaylists(playlists);
+      const playlists = await getUserPlaylists(t);
+      setSpotifyPlaylists(playlists);
     } catch (e) {
-      setError("Failed to load playlists.");
+      setError("Failed to load Spotify playlists.");
     } finally {
-      setLoadingPlaylists(false);
+      setLoadingSpotifyPlaylists(false);
+    }
+  };
+
+  const fetchApplePlaylists = async () => {
+    if (!isAppleAuthorized) return;
+    setLoadingApplePlaylists(true);
+    setIsAppleSubscriptionActive(true);
+    try {
+      const { getAppleMusicUserPlaylists } = await import('./services/musicKitService');
+      // @ts-ignore
+      const playlists = await getAppleMusicUserPlaylists();
+      setApplePlaylists(playlists || []);
+    } catch (e: any) {
+      if (e.message === "SUBSCRIPTION_REQUIRED") {
+        setIsAppleSubscriptionActive(false);
+      } else {
+        setError("Failed to load Apple Music playlists.");
+      }
+    } finally {
+      setLoadingApplePlaylists(false);
     }
   };
 
   useEffect(() => {
-    // Re-fetch playlists if direction changes
-    fetchUserPlaylists();
-  }, [direction, isAppleAuthorized, spotifyToken]);
+    fetchSpotifyPlaylists();
+  }, [spotifyToken]);
+
+  useEffect(() => {
+    fetchApplePlaylists();
+  }, [isAppleAuthorized]);
 
   const handleSpotifyLogin = () => {
     window.location.href = '/api/spotify/login';
   };
 
-  const handlePlaylistSelect = async (playlistId: string) => {
+  const handlePlaylistSelect = async (playlistId: string, source: 'spotify' | 'apple') => {
     setAppState(AppState.PROCESSING);
     setError(null);
+    setDirection(source === 'spotify' ? 'spotify-to-apple' : 'apple-to-spotify');
     try {
       let data;
-      if (direction === 'spotify-to-apple') {
+      if (source === 'spotify') {
         data = await fetchSpotifyPlaylist(playlistId, spotifyToken || undefined);
       } else {
         const { getAppleMusicPlaylist } = await import('./services/musicKitService');
@@ -239,136 +259,125 @@ export default function App() {
         <div className="glass-morphism rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
           {appState === AppState.IDLE && (
             <div className="space-y-8">
-
-              {/* Setup Connections */}
-              <div className="flex flex-col md:flex-row gap-4 items-stretch relative">
-                {/* Source Card */}
-                <div className={`flex-1 p-6 rounded-2xl border transition-all ${direction === 'spotify-to-apple'
-                  ? (spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700')
-                  : (isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700')
-                  }`}>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${direction === 'spotify-to-apple' ? 'bg-[#1DB954] text-black' : 'bg-[#FA243C] text-white'}`}>
-                      {direction === 'spotify-to-apple' ? <Music2 size={20} /> : <Music size={20} />}
+              <div className="flex flex-col md:flex-row gap-6 items-stretch">
+                {/* Spotify Section */}
+                <div className="flex-1 flex flex-col gap-4">
+                  <div className={`p-6 rounded-2xl border transition-all ${spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700'}`}>
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-10 h-10 rounded-full bg-[#1DB954] flex items-center justify-center text-black">
+                        <Music2 size={20} />
+                      </div>
+                      {spotifyToken && <CheckCircle2 className="text-green-500" size={20} />}
                     </div>
-                    {((direction === 'spotify-to-apple' && spotifyToken) || (direction === 'apple-to-spotify' && isAppleAuthorized)) &&
-                      <CheckCircle2 className={direction === 'spotify-to-apple' ? "text-green-500" : "text-red-500"} size={20} />
-                    }
-                  </div>
-                  <h3 className="font-bold text-white mb-1">{direction === 'spotify-to-apple' ? 'Spotify' : 'Apple Music'} (Source)</h3>
-                  <p className="text-xs text-slate-400 mb-4 h-10">
-                    {direction === 'spotify-to-apple'
-                      ? 'Connect Spotify to access your playlists.'
-                      : 'Connect Apple Music to access your library.'}
-                  </p>
+                    <h3 className="font-bold text-white mb-1">Spotify</h3>
+                    <p className="text-xs text-slate-400 mb-4 h-10">Connect Spotify to teleport your playlists.</p>
 
-                  {direction === 'spotify-to-apple' ? (
-                    !spotifyToken ? (
+                    {!spotifyToken ? (
                       <button onClick={handleSpotifyLogin} className="w-full py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-lg transition-all text-sm">Connect Spotify</button>
                     ) : (
-                      <button onClick={() => { setSpotifyToken(null); setUserPlaylists([]); }} className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all text-sm">Disconnect</button>
-                    )
-                  ) : (
-                    !isAppleAuthorized ? (
-                      <button onClick={handleAuthorize} className="w-full py-2 bg-[#FA243C] hover:bg-[#ff364e] text-white font-bold rounded-lg transition-all text-sm">Connect Apple Music</button>
-                    ) : (
-                      <div className="w-full py-2 bg-transparent text-red-400 font-medium text-center text-sm border border-red-500/30 rounded-lg cursor-default">Connected</div>
-                    )
+                      <button onClick={() => { setSpotifyToken(null); setSpotifyPlaylists([]); }} className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all text-sm">Disconnect</button>
+                    )}
+                  </div>
+
+                  {spotifyToken && (
+                    <div className="bg-slate-800/30 rounded-2xl border border-slate-700 overflow-hidden flex-1 flex flex-col">
+                      <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
+                        <h3 className="font-bold text-xs text-white uppercase tracking-wider">Your Spotify Playlists</h3>
+                        <span className="text-[10px] text-slate-500">{spotifyPlaylists.length} total</span>
+                      </div>
+                      <div className="max-h-80 overflow-y-auto space-y-1 p-2 scrollbar-thin scrollbar-thumb-slate-700">
+                        {loadingSpotifyPlaylists ? (
+                          <div className="flex justify-center py-8"><Loader2 className="animate-spin text-indigo-500" /></div>
+                        ) : (
+                          spotifyPlaylists.map(pl => (
+                            <button
+                              key={pl.id}
+                              onClick={() => handlePlaylistSelect(pl.id, 'spotify')}
+                              className="w-full text-left p-2 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center gap-3 group"
+                            >
+                              {pl.images?.[0]?.url ? (
+                                <img src={pl.images[0].url} className="w-8 h-8 rounded shadow-md object-cover" alt="" />
+                              ) : (
+                                <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center"><Music size={14} /></div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium text-slate-200 text-sm group-hover:text-white truncate">{pl.name}</div>
+                              </div>
+                              <ChevronRight className="ml-auto text-slate-600 group-hover:text-green-400" size={14} />
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
 
-                {/* Swap Button */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 hidden md:block">
-                  <button
-                    onClick={() => setDirection(d => d === 'spotify-to-apple' ? 'apple-to-spotify' : 'spotify-to-apple')}
-                    className="bg-slate-800 p-2 rounded-full border border-slate-600 hover:border-indigo-500 hover:text-indigo-400 text-slate-400 shadow-xl transition-all group"
-                  >
-                    <ArrowLeftRight size={20} className="group-hover:rotate-180 transition-transform" />
-                  </button>
-                </div>
-                {/* Mobile Swap */}
-                <div className="flex justify-center md:hidden -my-2 z-10">
-                  <button
-                    onClick={() => setDirection(d => d === 'spotify-to-apple' ? 'apple-to-spotify' : 'spotify-to-apple')}
-                    className="bg-slate-800 p-2 rounded-full border border-slate-600 hover:border-indigo-500 hover:text-indigo-400 text-slate-400 shadow-xl transition-all rotate-90"
-                  >
-                    <ArrowLeftRight size={20} />
-                  </button>
-                </div>
-
-                {/* Target Card */}
-                <div className={`flex-1 p-6 rounded-2xl border transition-all ${direction === 'apple-to-spotify'
-                  ? (spotifyToken ? 'bg-green-500/10 border-green-500/50' : 'bg-slate-800/50 border-slate-700')
-                  : (isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700')
-                  }`}>
-                  <div className="flex justify-between items-start mb-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${direction === 'apple-to-spotify' ? 'bg-[#1DB954] text-black' : 'bg-[#FA243C] text-white'}`}>
-                      {direction === 'apple-to-spotify' ? <Music2 size={20} /> : <Music size={20} />}
+                {/* Apple Music Section */}
+                <div className="flex-1 flex flex-col gap-4">
+                  <div className={`p-6 rounded-2xl border transition-all ${isAppleAuthorized ? 'bg-red-500/10 border-red-500/50' : 'bg-slate-800/50 border-slate-700'}`}>
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-10 h-10 rounded-full bg-[#FA243C] flex items-center justify-center text-white">
+                        <Music size={20} />
+                      </div>
+                      {isAppleAuthorized && <CheckCircle2 className="text-red-500" size={20} />}
                     </div>
-                    {((direction === 'apple-to-spotify' && spotifyToken) || (direction === 'spotify-to-apple' && isAppleAuthorized)) &&
-                      <CheckCircle2 className={direction === 'apple-to-spotify' ? "text-green-500" : "text-red-500"} size={20} />
-                    }
-                  </div>
-                  <h3 className="font-bold text-white mb-1">{direction === 'apple-to-spotify' ? 'Spotify' : 'Apple Music'} (Target)</h3>
-                  <p className="text-xs text-slate-400 mb-4 h-10">
-                    {direction === 'apple-to-spotify'
-                      ? 'Connect Spotify to create playlists.'
-                      : 'Authorize Apple Music to create playlists.'}
-                  </p>
+                    <h3 className="font-bold text-white mb-1">Apple Music</h3>
+                    <p className="text-xs text-slate-400 mb-4 h-10">Connect Apple Music to teleport your playlists.</p>
 
-                  {direction === 'apple-to-spotify' ? (
-                    !spotifyToken ? (
-                      <button onClick={handleSpotifyLogin} className="w-full py-2 bg-[#1DB954] hover:bg-[#1ed760] text-black font-bold rounded-lg transition-all text-sm">Connect Spotify</button>
-                    ) : (
-                      <button onClick={() => { setSpotifyToken(null); setUserPlaylists([]); }} className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-all text-sm">Disconnect</button>
-                    )
-                  ) : (
-                    !isAppleAuthorized ? (
+                    {!isAppleAuthorized ? (
                       <button onClick={handleAuthorize} className="w-full py-2 bg-[#FA243C] hover:bg-[#ff364e] text-white font-bold rounded-lg transition-all text-sm">Connect Apple Music</button>
                     ) : (
                       <div className="w-full py-2 bg-transparent text-red-400 font-medium text-center text-sm border border-red-500/30 rounded-lg cursor-default">Connected</div>
-                    )
+                    )}
+                  </div>
+
+                  {isAppleAuthorized && (
+                    <div className="bg-slate-800/30 rounded-2xl border border-slate-700 overflow-hidden flex-1 flex flex-col">
+                      <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
+                        <h3 className="font-bold text-xs text-white uppercase tracking-wider">Your Apple Music Playlists</h3>
+                        <span className="text-[10px] text-slate-500">{applePlaylists.length} total</span>
+                      </div>
+                      <div className="max-h-80 overflow-y-auto space-y-1 p-2 scrollbar-thin scrollbar-thumb-slate-700">
+                        {loadingApplePlaylists ? (
+                          <div className="flex justify-center py-8"><Loader2 className="animate-spin text-indigo-500" /></div>
+                        ) : !isAppleSubscriptionActive ? (
+                          <div className="p-6 text-center space-y-3">
+                            <AlertCircle className="mx-auto text-red-400" size={32} />
+                            <div>
+                              <p className="text-sm font-bold text-white">Subscription Required</p>
+                              <p className="text-xs text-slate-400 mt-1">Apple Music requires an active subscription to access and manage your library.</p>
+                            </div>
+                            <a
+                              href="https://music.apple.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-block text-xs font-bold text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              Check Subscription Status →
+                            </a>
+                          </div>
+                        ) : (
+                          applePlaylists.map(pl => (
+                            <button
+                              key={pl.id}
+                              onClick={() => handlePlaylistSelect(pl.id, 'apple')}
+                              className="w-full text-left p-2 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center gap-3 group"
+                            >
+                              <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-slate-400 group-hover:text-red-400 transition-colors">
+                                <Music size={14} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium text-slate-200 text-sm group-hover:text-white truncate">{pl.name}</div>
+                              </div>
+                              <ChevronRight className="ml-auto text-slate-600 group-hover:text-red-400" size={14} />
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
-
-              {/* Playlist Picker (If Source Connected) */}
-              {((direction === 'spotify-to-apple' && spotifyToken) || (direction === 'apple-to-spotify' && isAppleAuthorized)) && (
-                <div className="bg-slate-800/30 rounded-2xl border border-slate-700 overflow-hidden">
-                  <div className="p-4 border-b border-slate-700 bg-slate-900/50 flex justify-between items-center">
-                    <h3 className="font-bold text-white flex items-center gap-2">
-                      <ListMusic size={18} className="text-indigo-400" />
-                      Select a Playlist
-                    </h3>
-                    <span className="text-xs text-slate-500">{userPlaylists.length} playlists found</span>
-                  </div>
-
-                  <div className="max-h-64 overflow-y-auto space-y-1 p-2 scrollbar-thin scrollbar-thumb-slate-700">
-                    {loadingPlaylists ? (
-                      <div className="flex justify-center py-8"><Loader2 className="animate-spin text-indigo-500" /></div>
-                    ) : (
-                      userPlaylists.map(pl => (
-                        <button
-                          key={pl.id}
-                          onClick={() => handlePlaylistSelect(pl.id)}
-                          className="w-full text-left p-2 hover:bg-slate-700/50 rounded-lg transition-colors flex items-center gap-3 group"
-                        >
-                          {pl.images?.[0]?.url ? (
-                            <img src={pl.images[0].url} className="w-10 h-10 rounded shadow-md object-cover" alt="" />
-                          ) : (
-                            <div className="w-10 h-10 bg-slate-700 rounded flex items-center justify-center"><Music size={16} /></div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium text-slate-200 group-hover:text-white truncate">{pl.name}</div>
-                            <div className="text-xs text-slate-500">{pl.tracks.total} tracks</div>
-                          </div>
-                          <ChevronRight className="ml-auto text-slate-600 group-hover:text-indigo-400" size={16} />
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
